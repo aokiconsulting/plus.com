@@ -1,0 +1,7 @@
+.DS_Store
+Thumbs.db
+node_modules/
+*.log
+# 本番の接続情報を入れた config.js は公開リポジトリに載せないこと
+# （Supabase の anon key は公開前提の鍵ですが、URLと合わせて別管理にする場合はこの行のコメントを外す）
+# app/config.js
