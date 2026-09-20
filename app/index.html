@@ -351,15 +351,51 @@ table.pdf3-rem{width:100%;border-collapse:collapse;margin-top:22px;table-layout:
 .pdf3-rem td{border:1px solid #000;padding:6px 8px;font-size:11px;vertical-align:middle;line-height:1.7}
 .pdf3-rem .lbl{background:#A9D08E;text-align:center;width:16%;font-weight:700}
 .pdf3-rem .box{height:74px;vertical-align:top}
-@page{size:A4;margin:14mm 12mm}
+@page{size:A4 portrait;margin:9mm 10mm}
 @media print{
-  #login,#app,#sheet-root,#toast{display:none!important}
-  #pdf{display:block!important;position:static;background:#fff}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
+  html,body{height:auto;overflow:visible;background:#fff}
+  #login,#app,#sheet-root,#toast,#sync-banner{display:none!important}
+  #pdf{display:block!important;position:static;background:#fff;height:auto;overflow:visible}
   .pdf-tools{display:none!important}
-  .pdf-scroll{padding:0;overflow:visible}
-  .sheet-a4{box-shadow:none;width:auto;padding:0}
+  .pdf-scroll{padding:0;overflow:visible;height:auto}
   .pdf-fit{transform:none!important;width:auto!important;height:auto!important;margin:0!important}
   .pdf-clip{overflow:visible!important;width:auto!important;height:auto!important}
+  .sheet-a4{box-shadow:none;width:190mm;max-width:190mm;padding:0;margin:0}
+  /* 見積書：1枚に収まるよう少し詰める */
+  .pdf2{font-size:11px}
+  .pdf2 h1{font-size:20px;margin-bottom:12px}
+  .pdf2-head{gap:12px}
+  .pdf2-cust{font-size:12px;line-height:1.6}
+  .pdf2-co{font-size:11px;line-height:1.55}
+  .pdf2-co .stamp{width:50px;height:50px;top:28px}
+  .pdf2-subject{margin-top:12px;font-size:12px}
+  .pdf2-amt{margin-top:10px;font-size:14px}
+  table.pdf2-tbl{margin-top:12px}
+  .pdf2-tbl th{padding:3px 6px;font-size:11px}
+  .pdf2-tbl td{padding:4px 6px;font-size:11px}
+  .pdf2-tbl .d{font-size:9px}
+  .pdf2-tbl tbody tr:nth-child(even) td{background:#E4E4E4!important}
+  .pdf2-sum{margin-top:10px}
+  .pdf2-sum td{padding:3px 6px;font-size:11px}
+  .pdf2-remarks{margin-top:10px}
+  .pdf2-remarks .box{font-size:10px;line-height:1.6;min-height:0;padding:6px 8px}
+  .pdf2-page{margin-top:8px;font-size:10px}
+  /* 請求書 */
+  .pdf3{font-size:11px}
+  .pdf3 h1{font-size:20px;margin-bottom:12px}
+  .pdf3-co .coname{font-size:14px}
+  .pdf3-co{font-size:12px;line-height:1.6}
+  .pdf3-co .stamp{width:62px;height:62px}
+  .pdf3-amt{margin-top:10px}
+  table.pdf3-tbl{margin-top:10px}
+  .pdf3-tbl th,.pdf3-tbl td{height:18px;padding:2px 5px;font-size:10.5px}
+  .pdf3-tbl th{background:#A9D08E!important}
+  .pdf3-sum td{height:18px;padding:2px 6px;font-size:10.5px}
+  .pdf3-sum .lbl,.pdf3-rem .lbl{background:#A9D08E!important}
+  .pdf3-rem{margin-top:12px}
+  .pdf3-rem .box{height:54px}
+  tr,.pdf2-remarks,.pdf3-rem,.pdf2-sum,.pdf3-sum{page-break-inside:avoid;break-inside:avoid}
 }
 
 /* ---- パソコン表示 ---- */
@@ -556,6 +592,7 @@ async function loadDb(){
       if(db&&db.settings&&!db.settings.stamp) db.settings.stamp=DEFAULT_STAMP;
       if(db) mergeWorkItems();
       if(db&&db.staff&&!db.staff.some(x=>x.email==='aoki.consulting.co@gmail.com')) db.staff.unshift(clone(DEFAULT_STAFF[0]));
+      if(db) mergeProducts();
       setSync('ok');
     }catch(e){ setSync('ok'); }
     if(!db){ db=seed(); db.updatedAt=nowIso();
@@ -591,9 +628,25 @@ async function syncNow(){
   if(sync.state==='ok') toast('同期しました（'+user.name+'）');
 }
 function whoWhen(o){ if(!o||!o.at) return '—'; const d=new Date(o.at); const t=isoLocal(d)===today()?'':(d.getMonth()+1)+'/'+d.getDate()+' '; return esc(o.by)+'　'+t+pad(d.getHours())+':'+pad(d.getMinutes()); }
-function shortName(n){ return String(n||'').split(/[ 　]/)[0]; }
+function shortName(n){ const t=String(n||'').split(/[ 　]/)[0]; return t.length>5?t.slice(0,5)+'…':t; }
 
 /* ===== 初期データ（単価・原価はすべて仮の数字） ===== */
+const PRICE_REV='2026-07';
+function mergeProducts(){
+  if(!db||!db.products) return;
+  db.products.forEach(p=>{ if(!p.unit) p.unit='台' });
+  const base=seed().products, key=p=>[p.maker,p.name,p.model].join('\u0001'), have=new Set(db.products.map(key));
+  base.forEach(p=>{ if(!have.has(key(p))) db.products.push(p); });
+  // 仕入価格の改定分は、同じメーカー＋型番の原価を上書きする（1回だけ）
+  if(db.priceRev!==PRICE_REV){
+    base.forEach(p=>{
+      if(!p.model) return;
+      const ex=db.products.find(x=>x.maker===p.maker&&x.model===p.model);
+      if(ex&&Number(ex.cost)!==Number(p.cost)){ ex.cost=p.cost; ex.memo=p.memo||ex.memo; }
+    });
+    db.priceRev=PRICE_REV;
+  }
+}
 function mergeWorkItems(){
   if(!db||!db.workItems) return;
   if(!db.removedDefaults) db.removedDefaults=[];
@@ -696,7 +749,7 @@ function seed(){
     W('経費','資材搬入運搬費','式',0,0),
     W('経費','諸経費（交通費含む）','式',0,0),
   ];
-  const P=(maker,name,model,cat,listPrice,cost,price)=>({id:uid(),maker,name,model,cat,listPrice,cost,price,taxType:'課税',memo:''});
+  const P=(maker,name,model,cat,listPrice,cost,price,unit)=>({id:uid(),maker,name,model,cat,listPrice,cost,price,unit:unit||'台',taxType:'課税',memo:''});
   const products=[
     P('ダイキン','壁掛形 6畳用','DEMO-D22（サンプル型番）','家庭用',150000,78000,120000),
     P('ダイキン','壁掛形 10畳用','DEMO-D28（サンプル型番）','家庭用',190000,105000,150000),
@@ -709,6 +762,56 @@ function seed(){
     P('シャープ','壁掛形 8畳用','DEMO-S25（サンプル型番）','家庭用',150000,80000,125000),
   ];
   const wid=n=>'w:'+workItems.find(w=>w.name===n).id;
+  // --- 渡辺パイプ 令和8年7月度 価格表（No.000000189-0／2026年7月28日）より 冷媒管（オーケー） ---
+  const W8=(name,model,cost,listPrice,unit)=>{const o=P('オーケー',name,model,'材料',listPrice,cost,0,unit||'個');o.memo='渡辺パイプ 令和8年7月度 価格表';return o};
+  products.push(
+    W8('空調用冷媒銅管ペアコイル20M 保温8mm 6.35×9.52','K-HP23E',23500,65600),
+    W8('空調用冷媒銅管ペアコイル20M 保温8mm/10mm 6.35×12.70','K-HP24E',38016,79200),
+    W8('空調用冷媒銅管ペアコイル20M 保温10mm 6.35×9.52','K-HPE23E',29000,71800),
+    W8('空調用冷媒銅管ペアコイル20M 保温10mm 6.35×12.70','K-HPE24E',39840,83000),
+    W8('空調用冷媒銅管ペアコイル20M 保温10mm 9.52×15.88','K-HPE35E',59568,124100),
+    W8('空調用冷媒銅管ペアコイル20M 保温10mm 9.52×19.05','K-HPE36E',77520,161500,'本'),
+    W8('高断熱ペアコイル20m 保温10mm/20mm 6.35×9.52','K-HPHE23E',63696,132700),
+    W8('高断熱ペアコイル20m 保温10mm/20mm 6.35×12.70','K-HPHE24E',75072,156400),
+    W8('高断熱ペアコイル20m 保温10mm/20mm 9.52×15.88','K-HPHE35E',101040,210500),
+    W8('空調用冷媒銅管 シングルコイル 保温10mm 6.35×20M','K-HSE2E',15792,32900),
+    W8('空調用冷媒銅管 シングルコイル 保温10mm 9.52×20M','K-HSE3E',21552,44900),
+    W8('空調用冷媒銅管 シングルコイル 保温10mm 12.70×20M','K-HS4E',26400,55000),
+    W8('空調用冷媒銅管 シングルコイル 保温10mm 15.88×20M','K-HS5E',38688,80600),
+    W8('空調用冷媒銅管 シングルコイル 保温10mm 19.05×20M','K-HS6E',54384,113300)
+  );
+  // --- 渡辺パイプ 2026年7月分 請求書（No.T4010001142571／2026/08/04発行）の仕入単価 ---
+  const WI=(maker,name,model,cost,unit)=>{const o=P(maker,name,model,'材料',0,cost,0,unit||'個');o.memo='渡辺パイプ 2026年7月 請求';return o};
+  const invoiceItems=[
+    WI('イナバデンコー','スーパーロックV型','SRV-46B',182),
+    WI('イナバデンコー','保温材保護プレート','SR-HGZ',72),
+    WI('イナバデンコー','断熱ドレンホース','DSH-25N',15456,'本'),
+    WI('アサヒサンキ','ラッキング ニュークリーム','No.8',1400),
+    WI('アサヒサンキ','ラクエル ニュークリーム','No.8',1300),
+    WI('トウヨウベース','タイガーベース','L500-100',1072),
+    WI('ネグロス','ケーブル・PF管支持具','TW3-9N',39),
+    WI('ネグロス','電線管支持金具','TPC3',76),
+    WI('トウエイ','空調用ドレン 掃除口 30','DA CO',163),
+    WI('セキスイ','ACドレン アダプター 25','ACDA25',168),
+    WI('セキスイ','ACドレン アダプター 30','ACDA30',202),
+    WI('クボタケミックス','DV 90°Y 50×30','50X30 DT',154),
+    WI('クボタケミックス','DV 90°Y 30','30 DT',64),
+    WI('クボタケミックス','DV 90°エルボ 30','30 DL',46),
+    WI('クボタケミックス','DV 45°エルボ 30','30X45 45L',46),
+    WI('クボタケミックス','DV ソケット 30','30 DS',41),
+    WI('クボタケミックス','TSチーズ 30×25','30X25',211),
+    WI('オーケー','ファイバリア','K-JAPK100',3120),
+    WI('オーケー','出口ドレンホース','K-DUP1G',8280,'本'),
+    WI('オーケー','空調用冷媒銅管 シングル直管 保温10mm 25.40×4M','K-HC10B',14100,'本')
+  ];
+  invoiceItems.forEach(o=>{
+    const ex=products.find(x=>x.maker===o.maker&&x.model===o.model);
+    if(ex){ ex.cost=o.cost; ex.memo=o.memo; } else products.push(o);
+  });
+  // 請求書にあった単価で価格表の原価を更新（型番が同じもの）
+  [['K-HPE35E',58327],['K-HS4E',25850]].forEach(([model,cost])=>{
+    const ex=products.find(x=>x.model===model); if(ex){ ex.cost=cost; ex.memo='渡辺パイプ 2026年7月 請求'; }
+  });
   const wid2=n=>{const w=workItems.find(x=>x.name===n);return w?'w:'+w.id:null};
   const tpl=(arr)=>arr.map(a=>({ref:wid2(a[0]),qty:a[1]})).filter(x=>x.ref);
   const templates=[
@@ -919,6 +1022,72 @@ function vEstimate(){
     (isAdmin()?'<div style="margin-top:22px"><button class="btn btn-danger btn-block" data-act="delEst" data-id="'+e.id+'">この見積を削除</button></div>':'');
 }
 
+/* ===== PDF作成（プレビューをそのまま画像にしてA4に載せる） ===== */
+let pdfLibs=null;
+function loadScript(src){ return new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src=src; sc.onload=res; sc.onerror=()=>rej(new Error('load failed')); document.head.appendChild(sc); }); }
+function loadPdfLibs(){
+  if(window.html2canvas&&window.jspdf) return Promise.resolve();
+  if(pdfLibs) return pdfLibs;
+  pdfLibs=(async()=>{
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  })().catch(e=>{ pdfLibs=null; throw e; });
+  return pdfLibs;
+}
+let pdfBusy=false;
+async function buildPdf(){
+  const sheet=$('#pdf .sheet-a4'); if(!sheet) return null;
+  await loadPdfLibs();
+  const canvas=await window.html2canvas(sheet,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,windowWidth:900,
+    onclone:doc=>{ const f=doc.querySelector('#pdf-fit'); if(f){ f.style.transform='none'; f.style.width='720px'; } const c=doc.querySelector('#pdf-clip'); if(c){ c.style.width='auto'; c.style.height='auto'; c.style.overflow='visible'; } const sc=doc.querySelector('.pdf-scroll'); if(sc){ sc.style.overflow='visible'; } const sh=doc.querySelector('#pdf .sheet-a4'); if(sh){ sh.style.padding='18px 22px 22px'; sh.style.boxShadow='none'; } }});
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+  const pageW=210, pageH=297, m=8, availW=pageW-2*m, availH=pageH-2*m;
+  let imgW=availW, imgH=canvas.height*imgW/canvas.width;
+  if(imgH<=availH*1.25){
+    // 少し長い程度なら縮めて1枚に収める
+    if(imgH>availH){ const k=availH/imgH; imgW*=k; imgH=availH; }
+    pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',m+(availW-imgW)/2,m,imgW,imgH);
+  } else {
+    const pxPerMm=canvas.width/availW, pageHpx=Math.floor(availH*pxPerMm); let y=0, first=true;
+    while(y<canvas.height){
+      const h=Math.min(pageHpx,canvas.height-y); const c2=document.createElement('canvas'); c2.width=canvas.width; c2.height=h;
+      c2.getContext('2d').drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);
+      if(!first) pdf.addPage(); pdf.addImage(c2.toDataURL('image/jpeg',0.92),'JPEG',m,m,availW,h/pxPerMm); first=false; y+=h;
+    }
+  }
+  return pdf;
+}
+let pdfCurrent={kind:'',number:'',customer:''};
+function pdfFileName(){ const t=pdfCurrent.kind==='invoice'?'請求書':'見積書'; const safe=v=>String(v||'').replace(/[\\/:*?"<>|\s]+/g,'_'); return t+(pdfCurrent.number?'_'+safe(pdfCurrent.number):'')+(pdfCurrent.customer?'_'+safe(pdfCurrent.customer):'')+'.pdf'; }
+async function printPdf(){
+  if(pdfBusy) return; pdfBusy=true; toast('PDFを作成しています…');
+  try{
+    const pdf=await buildPdf(); if(!pdf) return;
+    const name=pdfFileName(), blob=pdf.output('blob');
+    dlBlob(blob,name);
+    toast('PDFを保存しました。開いて印刷できます');
+  }catch(e){
+    // ライブラリが読めない環境ではブラウザの印刷に切り替える
+    try{ window.print(); toast('通信できないため、ブラウザの印刷画面を開きました'); }catch(e2){ toast('この画面では印刷できません'); }
+  }
+  pdfBusy=false;
+}
+async function sharePdf(id,kind){
+  if(pdfBusy) return; pdfBusy=true; toast('PDFを作成しています…');
+  try{
+    const pdf=await buildPdf(); if(!pdf) return;
+    const name=pdfFileName(), blob=pdf.output('blob');
+    const file=new File([blob],name,{type:'application/pdf'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file],title:name}); pdfBusy=false; return; }catch(err){ if(err&&err.name==='AbortError'){ pdfBusy=false; return } }
+    }
+    dlBlob(blob,name); toast('PDFを保存しました。LINEやメールに添付して送れます');
+    pdfBusy=false; return;
+  }catch(e){ pdfBusy=false; }
+  await shareText(id,kind);
+}
+
 /* ===== マスターの書き出し・取り込み ===== */
 let xlsxReady=null;
 function loadXLSX(){
@@ -933,9 +1102,9 @@ function loadXLSX(){
   return xlsxReady;
 }
 const WORK_COLS=['分類','工事名','単位','単価','原価'];
-const PROD_COLS=['メーカー','商品名','型番','カテゴリ','定価','仕入原価','標準販売価格','税区分','備考'];
+const PROD_COLS=['メーカー','商品名','型番','カテゴリ','単位','定価','仕入原価','標準販売価格','税区分','備考'];
 function workRows(){ return db.workItems.map(w=>({'分類':w.cat,'工事名':w.name,'単位':w.unit,'単価':Number(w.price)||0,'原価':Number(w.cost)||0})); }
-function prodRows(){ return db.products.map(p=>({'メーカー':p.maker,'商品名':p.name,'型番':p.model,'カテゴリ':p.cat,'定価':Number(p.listPrice)||0,'仕入原価':Number(p.cost)||0,'標準販売価格':Number(p.price)||0,'税区分':p.taxType||'課税','備考':p.memo||''})); }
+function prodRows(){ return db.products.map(p=>({'メーカー':p.maker,'商品名':p.name,'型番':p.model,'カテゴリ':p.cat,'単位':p.unit||'台','定価':Number(p.listPrice)||0,'仕入原価':Number(p.cost)||0,'標準販売価格':Number(p.price)||0,'税区分':p.taxType||'課税','備考':p.memo||''})); }
 function dlBlob(blob,name){
   const url=URL.createObjectURL(blob), a=document.createElement('a');
   a.href=url; a.download=name; a.style.display='none'; document.body.appendChild(a); a.click();
@@ -1011,7 +1180,7 @@ async function importMasters(file){
   prod.forEach(r=>{
     const maker=String(r['メーカー']||'').trim(), name=String(r['商品名']||'').trim(), model=String(r['型番']||'').trim(); if(!name) return;
     const ex=db.products.find(p=>p.maker===maker&&p.name===name&&p.model===model);
-    const o={maker,name,model,cat:String(r['カテゴリ']||'家庭用').trim(),listPrice:num(r['定価']),cost:num(r['仕入原価']),price:num(r['標準販売価格']),taxType:String(r['税区分']||'課税').trim(),memo:String(r['備考']||'').trim()};
+    const o={maker,name,model,cat:String(r['カテゴリ']||'家庭用').trim(),unit:String(r['単位']||'台').trim()||'台',listPrice:num(r['定価']),cost:num(r['仕入原価']),price:num(r['標準販売価格']),taxType:String(r['税区分']||'課税').trim(),memo:String(r['備考']||'').trim()};
     if(ex) plan.prodUpd.push([ex,o]); else plan.prodAdd.push(o);
   });
   const total=plan.workAdd.length+plan.workUpd.length+plan.prodAdd.length+plan.prodUpd.length;
@@ -1357,7 +1526,7 @@ function masterListHtml(){
   return makers.map(mk=>{
     const rows=db.products.filter(p=>p.maker===mk&&(!k||(p.maker+p.name+p.model+p.cat).toLowerCase().includes(k)));
     if(!rows.length) return '';
-    return '<h2 class="sec">'+esc(mk)+'</h2>'+rows.map(p=>'<button class="list-btn" data-act="openMaster" data-kind="product" data-id="'+p.id+'"><div class="grow"><div class="t">'+esc(p.name)+'</div><div class="s">'+esc(p.model)+'　'+esc(p.cat)+(isAdmin()?'　原価 '+yen(p.cost):'')+'</div></div><div class="price">'+yen(p.price)+'</div>'+(isAdmin()?'<span class="chev">›</span>':'')+'</button>').join('');
+    return '<h2 class="sec">'+esc(mk)+'</h2>'+rows.map(p=>'<button class="list-btn" data-act="openMaster" data-kind="product" data-id="'+p.id+'"><div class="grow"><div class="t">'+esc(p.name)+'</div><div class="s">'+esc(p.model)+'　'+esc(p.cat)+'　単位：'+esc(p.unit||'台')+(isAdmin()?'　原価 '+yen(p.cost):'')+'</div></div><div class="price">'+yen(p.price)+'</div>'+(isAdmin()?'<span class="chev">›</span>':'')+'</button>').join('');
   }).join('')||'<div class="empty">該当なし</div>';
 }
 function vMasters(){
@@ -1586,7 +1755,7 @@ function confirmSheet(title,msg,okLabel,act,dataAttr){
 function makeItem(ref,qty){
   const p=ref.split(':'), id=p[1];
   if(p[0]==='w'){ const w=db.workItems.find(x=>x.id===id); if(!w) return null; return {id:uid(),name:w.name,desc:'',qty:qty||1,unit:w.unit,price:w.price,cost:w.cost}; }
-  const pr=db.products.find(x=>x.id===id); if(!pr) return null; return {id:uid(),name:pr.maker+' '+pr.name,desc:pr.model,qty:qty||1,unit:'台',price:pr.price,cost:pr.cost};
+  const pr=db.products.find(x=>x.id===id); if(!pr) return null; return {id:uid(),name:pr.maker+' '+pr.name,desc:pr.model,qty:qty||1,unit:pr.unit||'台',price:pr.price,cost:pr.cost};
 }
 function pickRow(ref,t,s,price){ return '<button class="pick" data-act="pickItem" data-ref="'+ref+'"><div class="grow"><div class="t">'+esc(t)+'</div><div class="s">'+esc(s)+'</div></div><div class="price">'+yen(price)+'</div><div class="plus">＋</div></button>'; }
 function itemResults(){
@@ -1637,7 +1806,7 @@ function saveNewItem(){
   if(kind==='product'){
     const maker=$('#ni-maker').value.trim(), model=$('#ni-model').value.trim(), cat=$('#ni-cat').value;
     it={id:uid(),name:(maker?maker+' ':'')+name,desc:model,qty,unit,price,cost};
-    if(toMaster) db.products.push({id:uid(),maker,name,model,cat,listPrice:0,cost,price,taxType:'課税',memo:''});
+    if(toMaster) db.products.push({id:uid(),maker,name,model,cat,unit,listPrice:0,cost,price,taxType:'課税',memo:''});
   } else {
     const cat=$('#ni-cat').value.trim()||'その他';
     it={id:uid(),name,desc:'',qty,unit,price,cost};
@@ -1726,12 +1895,13 @@ function openMasterForm(kind,id){
       '<div class="field"><label>原価（円・社内用）</label><input type="number" inputmode="numeric" class="input" id="m-cost" value="'+w.cost+'"></div></div>'+
       '<div class="sheet-f">'+(id?'<button class="btn btn-danger" data-act="delMaster">削除</button>':'')+'<button class="btn btn-primary" data-act="saveMaster">保存</button></div>');
   } else {
-    const p=id?db.products.find(x=>x.id===id):{maker:'',name:'',model:'',cat:'家庭用',listPrice:'',cost:'',price:'',taxType:'課税',memo:''};
+    const p=id?db.products.find(x=>x.id===id):{maker:'',name:'',model:'',cat:'家庭用',unit:'台',listPrice:'',cost:'',price:'',taxType:'課税',memo:''};
     const makers=['ダイキン','三菱電機','日立','パナソニック','富士通ゼネラル','東芝','シャープ'];
     openSheetRaw('<div class="sheet-h"><h2>'+(id?'商品の編集':'商品を登録')+'</h2><button data-act="closeSheet">閉じる</button></div><div class="sheet-b">'+
       '<div class="field"><label>メーカー</label><input class="input" id="m-maker" list="m-makers" value="'+esc(p.maker)+'"><datalist id="m-makers">'+makers.map(c=>'<option value="'+c+'">').join('')+'</datalist></div>'+
       '<div class="field"><label>商品名</label><input class="input" id="m-name" value="'+esc(p.name)+'" placeholder="例：壁掛形 6畳用" data-autofocus></div>'+
-      '<div class="row2"><div class="field"><label>型番</label><input class="input" id="m-model" value="'+esc(p.model)+'"></div><div class="field"><label>カテゴリ</label><select class="input" id="m-cat">'+['家庭用','業務用','その他'].map(c=>'<option '+(c===p.cat?'selected':'')+'>'+c+'</option>').join('')+'</select></div></div>'+
+      '<div class="row2"><div class="field"><label>型番</label><input class="input" id="m-model" value="'+esc(p.model)+'"></div><div class="field"><label>カテゴリ</label><select class="input" id="m-cat">'+['家庭用','業務用','材料','その他'].map(c=>'<option '+(c===p.cat?'selected':'')+'>'+c+'</option>').join('')+'</select></div></div>'+
+      '<div class="field"><label>単位</label><select class="input" id="m-unit2">'+UNITS.map(u=>'<option '+(u===(p.unit||'台')?'selected':'')+'>'+u+'</option>').join('')+'</select></div>'+
       '<div class="row2"><div class="field"><label>定価（円）</label><input type="number" inputmode="numeric" class="input" id="m-list" value="'+p.listPrice+'"></div><div class="field"><label>仕入原価（円）</label><input type="number" inputmode="numeric" class="input" id="m-cost" value="'+p.cost+'"></div></div>'+
       '<div class="row2"><div class="field"><label>標準販売価格（円）</label><input type="number" inputmode="numeric" class="input" id="m-price" value="'+p.price+'"></div><div class="field"><label>税区分</label><select class="input" id="m-tax">'+['課税','非課税'].map(c=>'<option '+(c===p.taxType?'selected':'')+'>'+c+'</option>').join('')+'</select></div></div>'+
       '<div class="field"><label>備考</label><input class="input" id="m-memo" value="'+esc(p.memo)+'"></div></div>'+
@@ -1745,7 +1915,7 @@ function saveMaster(){
     const o={cat:$('#m-cat').value.trim()||'その他',name:nm,unit:$('#m-unit').value,price:Number($('#m-price').value)||0,cost:Number($('#m-cost').value)||0};
     if(id) Object.assign(db.workItems.find(x=>x.id===id),o); else db.workItems.push(Object.assign({id:uid()},o));
   } else {
-    const o={maker:$('#m-maker').value.trim(),name:nm,model:$('#m-model').value.trim(),cat:$('#m-cat').value,listPrice:Number($('#m-list').value)||0,cost:Number($('#m-cost').value)||0,price:Number($('#m-price').value)||0,taxType:$('#m-tax').value,memo:$('#m-memo').value.trim()};
+    const o={maker:$('#m-maker').value.trim(),name:nm,model:$('#m-model').value.trim(),cat:$('#m-cat').value,unit:$('#m-unit2')?$('#m-unit2').value:'台',listPrice:Number($('#m-list').value)||0,cost:Number($('#m-cost').value)||0,price:Number($('#m-price').value)||0,taxType:$('#m-tax').value,memo:$('#m-memo').value.trim()};
     if(id) Object.assign(db.products.find(x=>x.id===id),o); else db.products.push(Object.assign({id:uid()},o));
   }
   persist(); closeSheet(); render({keepScroll:true}); toast('保存しました');
@@ -1767,6 +1937,7 @@ function openTemplate(id){
 function openInvoicePdf(id){
   const iv=invById(id); if(!iv) return;
   const c=calcInv(iv), cu=cust(iv.customerId)||{}, s=db.settings;
+  pdfCurrent={kind:'invoice',number:iv.number,customer:custName(cu)};
   const jpDate=iso=>{ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); return d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日'; };
   const rows=iv.items.map(it=>'<tr><td class="c">'+esc(it.date||'')+'</td><td>'+esc(it.name)+(it.desc?'<div style="font-size:9px;color:#444">'+nl(it.desc)+'</div>':'')+'</td>'+
     '<td><div class="qty"><span>'+num(it.qty)+'</span><span>'+esc(it.unit)+'</span></div></td><td class="r">'+num(it.price)+'</td><td class="r">'+num(it.qty*it.price)+'</td><td class="r">'+(Number(it.expense)?num(it.expense):'')+'</td></tr>');
@@ -1779,7 +1950,7 @@ function openInvoicePdf(id){
     (s.email?'<div><span class="lbl">E-Mail：</span>'+esc(s.email)+'</div>':'')+
     '<div><span class="lbl">担当：</span>'+esc(staffName(iv.staffId))+'</div></div>';
   const bank=s.bank?'<div class="pdf3-bank"><div class="ttl">お振込先</div>'+nl(s.bank)+'</div>':'<div class="pdf3-bank"><div class="ttl">お振込先</div>（設定画面で振込先を登録してください）</div>';
-  $('#pdf').innerHTML='<div class="pdf-tools"><button class="btn btn-ghost" data-act="closePdf">閉じる</button><button class="btn btn-ghost" id="pdf-zoom" data-act="pdfZoom">拡大</button><button class="btn btn-navy" data-act="share" data-id="'+id+'" data-kind="invoice">共有</button><button class="btn btn-primary" data-act="print">印刷・保存</button></div>'+
+  $('#pdf').innerHTML='<div class="pdf-tools"><button class="btn btn-ghost" data-act="closePdf">閉じる</button><button class="btn btn-ghost" id="pdf-zoom" data-act="pdfZoom">拡大</button><button class="btn btn-navy" data-act="share" data-id="'+id+'" data-kind="invoice">PDFを送る</button><button class="btn btn-primary" data-act="print">PDF保存</button></div>'+
     '<div class="pdf-scroll"><div class="pdf-clip" id="pdf-clip"><div class="pdf-fit" id="pdf-fit"><div class="sheet-a4 pdf3"><h1>請求書</h1>'+
     '<div class="pdf3-grid"><div class="pdf3-ul pdf3-to"><span style="font-size:16px">'+esc(custName(cu))+'</span><span>'+(cu.type==='法人'?'御中':'様')+'</span></div>'+
       '<div class="pdf3-no"><span>請求No.'+esc(iv.number)+'</span><span>'+(s.invoice?'登録番号・'+esc(s.invoice):'')+'</span></div>'+
@@ -1805,6 +1976,7 @@ function openPdf(id,kind){
   const inv=false;
   const e=docById(id,kind); if(!e) return;
   const c=calc(e), cu=cust(e.customerId)||{}, s=db.settings;
+  pdfCurrent={kind:'estimate',number:e.number,customer:custName(cu)};
   let custBlock='<div class="nm">'+esc(custHon(cu))+'</div>'+(cu.zip?'<div>〒'+esc(cu.zip)+'</div>':'')+(cu.address?'<div>'+esc(cu.address)+'</div>':'');
   if(cu.type==='法人'){ if(cu.title) custBlock+='<div>'+esc(cu.title)+'</div>'; if(cu.contact) custBlock+='<div>'+esc(cu.contact)+'様</div>'; }
   let co=(s.logo?'<img class="logo" src="'+s.logo+'" alt="">':'')+'<div class="coname">'+esc(s.company)+'</div>'+(s.stamp?'<img class="stamp" src="'+s.stamp+'" alt="">':'')+
@@ -1829,7 +2001,7 @@ function openPdf(id,kind){
       sp('見積有効期限',(Number(s.validDays)||30)+'日間')+(e.propertyName?sp('物　件　名',e.propertyName):'')+
       (s.notesFooter?'<div>'+nl(s.notesFooter)+'</div>':'')+(e.notes?'<div>'+nl(e.notes)+'</div>':'');
   }
-  $('#pdf').innerHTML='<div class="pdf-tools"><button class="btn btn-ghost" data-act="closePdf">閉じる</button><button class="btn btn-ghost" id="pdf-zoom" data-act="pdfZoom">拡大</button><button class="btn btn-navy" data-act="share" data-id="'+id+'" data-kind="'+(kind||'')+'">共有</button><button class="btn btn-primary" data-act="print">印刷・保存</button></div>'+
+  $('#pdf').innerHTML='<div class="pdf-tools"><button class="btn btn-ghost" data-act="closePdf">閉じる</button><button class="btn btn-ghost" id="pdf-zoom" data-act="pdfZoom">拡大</button><button class="btn btn-navy" data-act="share" data-id="'+id+'" data-kind="'+(kind||'')+'">PDFを送る</button><button class="btn btn-primary" data-act="print">PDF保存</button></div>'+
     '<div class="pdf-scroll"><div class="pdf-clip" id="pdf-clip"><div class="pdf-fit" id="pdf-fit"><div class="sheet-a4 pdf2"><h1>'+(inv?'請求書':'見積書')+'</h1>'+
     '<div class="pdf2-head"><div class="pdf2-cust">'+custBlock+'</div><div class="pdf2-co">'+co+'</div></div>'+
     '<div class="pdf2-subject">件名：'+esc(e.projectName)+'</div>'+
@@ -1854,7 +2026,7 @@ function fitPdf(){
 }
 window.addEventListener('resize',()=>{ if($('#pdf').classList.contains('on')) fitPdf(); });
 function fitPdfLater(){ fitPdf(); requestAnimationFrame(fitPdf); setTimeout(fitPdf,120); document.querySelectorAll('#pdf img').forEach(im=>{ if(!im.complete) im.addEventListener('load',fitPdf,{once:true}); }); }
-async function share(id,kind){
+async function shareText(id,kind){
   const inv=kind==='invoice';
   const e=docById(id,kind), c=inv?calcInv(e):calc(e), cu=cust(e.customerId), s=db.settings;
   const text=(inv?'御請求書 ':'御見積書 ')+e.number+'\n'+custHon(cu)+'\n件名：'+e.projectName+'\n'+(inv?'御請求金額 ':'御見積金額 ')+yen(c.total)+'（税込）\n'+(inv?'お支払期限 '+jd(e.dueDate):'有効期限 '+jd(e.expiryDate))+'\n\n'+s.company;
@@ -1905,8 +2077,8 @@ const A={
   newItemForm:()=>openNewItemForm(), saveNewItem:()=>saveNewItem(),
   backToSearch:()=>{ const st=sheetState||{}; openItemSearch(st.prevQ||'',st.prevTab||'all'); },
   niKind:d=>{ const st=sheetState; const keep={q:$('#ni-name')?$('#ni-name').value:''}; st.kind=d.k; $('#ni-body').innerHTML=newItemBody(d.k,keep.q); },
-  pdf:d=>openPdf(d.id), closePdf:()=>{ $('#pdf').classList.remove('on'); pdfZoom=false; }, pdfZoom:()=>{ pdfZoom=!pdfZoom; fitPdf(); }, share:d=>share(d.id,d.kind),
-  print:()=>{ try{ window.print(); toast('印刷画面が開かない端末では、本開発のPDF保存機能で対応します'); }catch(e){ toast('この画面では印刷できません') } },
+  pdf:d=>openPdf(d.id), closePdf:()=>{ $('#pdf').classList.remove('on'); pdfZoom=false; }, pdfZoom:()=>{ pdfZoom=!pdfZoom; fitPdf(); }, share:d=>sharePdf(d.id,d.kind),
+  print:()=>printPdf(),
   dup:d=>dup(d.id), editEst:d=>{ if(!canEditDoc(estById(d.id))){ denied(); return } editEst(d.id) },
   delEst:d=>{ if(!isAdmin()){ denied(); return } const iv=invOfEst(d.id); if(iv){ openSheetRaw('<div class="sheet-h"><h2>削除できません</h2></div><div class="sheet-b"><p>この見積からは請求書 '+iv.number+' が作られています。先に請求書を削除してください。</p></div><div class="sheet-f"><button class="btn btn-ghost" data-act="closeSheet">閉じる</button><button class="btn btn-navy" data-act="openInv" data-id="'+iv.id+'">請求書を開く</button></div>'); return } confirmSheet('見積を削除','この見積を削除します。元に戻せません。','削除する','delEstOk','data-id="'+d.id+'"'); },
   delEstOk:d=>{ if(!isAdmin()){ denied(); return } db.estimates=db.estimates.filter(e=>e.id!==d.id); persist(); closeSheet(); toast('削除しました'); go('estimates',{},{reset:true}); },
