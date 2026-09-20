@@ -422,12 +422,12 @@ table.pdf3-rem{width:100%;border-collapse:collapse;margin-top:22px;table-layout:
     <div class="wordmark">ESTIMATE<small>現場で3分、見積書。</small></div>
     <div class="login-card">
       <div class="field"><label>メールアドレス</label><input class="input" id="login-email" inputmode="email" autocomplete="username"></div>
-      <div class="field"><label>パスワード</label><input class="input" id="login-pw" type="password" autocomplete="current-password"></div>
+      <div class="field" id="login-pw-wrap"><label>パスワード</label><input class="input" id="login-pw" type="password" autocomplete="current-password"></div>
 
       <div id="login-msg" class="note" style="display:none;color:var(--red);margin-bottom:10px"></div>
       <button class="btn btn-primary btn-block" data-act="login" data-mode="user">ログイン</button>
     </div>
-    <div class="login-hint" id="login-hint">メールアドレスとパスワードでログインします。<br>アカウントは管理者が「設定 → スタッフと権限」で登録します。</div>
+    <div class="login-hint" id="login-hint">試作品のため、パスワードは不要です。<br>空欄のまま「ログイン」で作成者、「管理者ログイン」で管理者として入ります。<br>メールアドレスを入れると、その方として入れます。</div>
     <div class="login-hint" id="login-forgot" style="display:none"><button class="link" style="color:#fff;text-decoration:underline" data-act="forgotPw">パスワードをお忘れの方</button></div>
     <div class="login-links"><button class="login-link" data-act="openSignup">新規アカウント作成</button><span class="sep"></span><button class="login-link" data-act="login" data-mode="admin">管理者ログイン</button></div>
     <div class="login-credit">Developer：あおきコンサルティング株式会社</div>
@@ -631,7 +631,16 @@ function whoWhen(o){ if(!o||!o.at) return '—'; const d=new Date(o.at); const t
 function shortName(n){ const t=String(n||'').split(/[ 　]/)[0]; return t.length>5?t.slice(0,5)+'…':t; }
 
 /* ===== 初期データ（単価・原価はすべて仮の数字） ===== */
-const PRICE_REV='2026-07';
+const PRICE_REV='2026-07b';
+const ITEM_REV='2026-09';
+const MOVED_TO_PRODUCTS=[
+  ['配管','ドレンホース'],['配管','VV-Fケーブル'],
+  ['化粧カバー','曲がり部材'],['化粧カバー','ジョイント'],['化粧カバー','エンド'],
+  ['冷媒配管','冷媒管 25.4φ×12.7φ（保温厚10mm）'],['冷媒配管','冷媒管 25.4φ×9.6φ（保温厚10mm）'],
+  ['冷媒配管','冷媒管 15.9φ×9.6φ（保温厚10mm）'],['冷媒配管','冷媒管 12.7φ×6.5φ（保温厚10mm）'],
+  ['ドレン','ドレン管 VP20'],['ドレン','ドレン管 VP30'],['ドレン','ドレン管 VP50'],
+  ['ドレン','ドレン管 AC-20'],['ドレン','ドレン管 AC-25'],['ドレン','断熱ドレンホース25']
+];
 function mergeProducts(){
   if(!db||!db.products) return;
   db.products.forEach(p=>{ if(!p.unit) p.unit='台' });
@@ -650,6 +659,13 @@ function mergeProducts(){
 function mergeWorkItems(){
   if(!db||!db.workItems) return;
   if(!db.removedDefaults) db.removedDefaults=[];
+  if(db.itemRev!==ITEM_REV){
+    MOVED_TO_PRODUCTS.forEach(([cat,name])=>{
+      db.workItems=db.workItems.filter(w=>!(w.cat===cat&&w.name===name));
+      if(db.removedDefaults.indexOf(cat+'\u0001'+name)<0) db.removedDefaults.push(cat+'\u0001'+name);
+    });
+    db.itemRev=ITEM_REV;
+  }
   const base=seed().workItems, have=new Set(db.workItems.map(w=>w.cat+'\u0001'+w.name).concat(db.removedDefaults));
   let added=0;
   base.forEach(w=>{ if(!have.has(w.cat+'\u0001'+w.name)){ db.workItems.push(w); added++; } });
@@ -670,13 +686,8 @@ function seed(){
     W('配管','2分3分配管','m',3500,1500),
     W('配管','2分4分配管','m',4500,2000),
     W('配管','配管延長','m',3500,1500),
-    W('配管','ドレンホース','m',800,300),
-    W('配管','VV-Fケーブル','m',900,300),
     W('化粧カバー','室内化粧カバー','式',8000,3000),
     W('化粧カバー','室外化粧カバー','式',9000,3500),
-    W('化粧カバー','曲がり部材','個',2500,1000),
-    W('化粧カバー','ジョイント','個',1500,600),
-    W('化粧カバー','エンド','個',1200,500),
     W('電気工事','専用回路','式',18000,8000),
     W('電気工事','コンセント交換','箇所',4000,1500),
     W('電気工事','100V→200V切替','式',6000,2000),
@@ -693,10 +704,6 @@ function seed(){
     W('その他','出張費','式',5000,2000),
     W('その他','諸経費','式',10000,0),
     // --- 業務用空調（実際の見積書をもとに追加。単価・原価は未入力＝0） ---
-    W('冷媒配管','冷媒管 25.4φ×12.7φ（保温厚10mm）','m',0,0),
-    W('冷媒配管','冷媒管 25.4φ×9.6φ（保温厚10mm）','m',0,0),
-    W('冷媒配管','冷媒管 15.9φ×9.6φ（保温厚10mm）','m',0,0),
-    W('冷媒配管','冷媒管 12.7φ×6.5φ（保温厚10mm）','m',0,0),
     W('冷媒配管','継手接合材','式',0,0),
     W('冷媒配管','支持金物','式',0,0),
     W('冷媒配管','配管施工費','式',0,0),
@@ -704,12 +711,6 @@ function seed(){
     W('冷媒配管','冷媒配管接続工事費','式',0,0),
     W('冷媒配管','配管保温工事費','式',0,0),
     W('冷媒配管','ラッキング工事費','式',0,0),
-    W('ドレン','ドレン管 VP20','m',0,0),
-    W('ドレン','ドレン管 VP30','m',0,0),
-    W('ドレン','ドレン管 VP50','m',0,0),
-    W('ドレン','ドレン管 AC-20','m',0,0),
-    W('ドレン','ドレン管 AC-25','m',0,0),
-    W('ドレン','断熱ドレンホース25','m',0,0),
     W('ドレン','ドレン配管施工費','式',0,0),
     W('ドレン','ドレン管接続工事費','式',0,0),
     W('ドレン','ドレンアップ取付作業費','台',0,0),
@@ -780,6 +781,91 @@ function seed(){
     W8('空調用冷媒銅管 シングルコイル 保温10mm 15.88×20M','K-HS5E',38688,80600),
     W8('空調用冷媒銅管 シングルコイル 保温10mm 19.05×20M','K-HS6E',54384,113300)
   );
+  // 価格表 3〜4ページ：シングルコイル 保温20mm／シングル直管
+  products.push(
+    W8('空調用冷媒銅管 シングルコイル 保温20mm 6.35×20M','K-HSH2E',35808,74600),
+    W8('空調用冷媒銅管 シングルコイル 保温20mm 9.52×20M','K-HSH3E',42240,88000),
+    W8('空調用冷媒銅管 シングルコイル 保温20mm 12.70×20M','K-HSH4E',52320,109000),
+    W8('空調用冷媒銅管 シングルコイル 保温20mm 15.88×20M','K-HSH5E',70848,147600),
+    W8('空調用冷媒銅管 シングルコイル 保温20mm 19.05×20M','K-HSH6E',92400,192500),
+    W8('空調用冷媒銅管 シングル直管 保温10mm 12.70×4M','K-HC4B',6576,13700,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温10mm 15.88×4M','K-HC5B',9024,18800,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温10mm 19.05×4M','K-HC6B',10752,22400,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温10mm 22.22×4M','K-HC7B',13344,27800,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温10mm 25.40×4M','K-HC10B',14400,30000,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温10mm 28.58×4M','K-HC11B',16608,34600,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温10mm 31.75×4M','K-HC12B',20064,41800,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温10mm 38.10×4M','K-HC14B',30000,62500,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm 19.05×4M','K-HCT6B',15312,31900,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm 22.22×4M','K-HCT7B',17952,37400,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm 25.40×4M','K-HCT10B',20352,42400,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm 28.58×4M','K-HCT11B',24096,50200,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm 31.75×4M','K-HCT12B',27936,58200,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm 38.10×4M','K-HCT14B',41376,86200,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm（国交省仕様）12.70×4M','K-HCH4B',10080,21000,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm（国交省仕様）15.88×4M','K-HCH5B',13152,27400,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm（国交省仕様）19.05×4M','K-HCH6B',15792,32900,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm（国交省仕様）22.22×4M','K-HCH7B',19344,40300,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm（国交省仕様）25.40×4M','K-HCH10B',25008,52100,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm（国交省仕様）28.58×4M','K-HCH11B',30816,64200,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm（国交省仕様）31.75×4M','K-HCH12B',35808,74600,'本'),
+    W8('空調用冷媒銅管 シングル直管 保温20mm（国交省仕様）38.10×4M','K-HCH14B',49872,103900,'本')
+  );
+  // 価格表 5ページ：塩ビパイプ（クボタケミックス）
+  const W8K=(name,model,cost,listPrice)=>{const o=P('クボタケミックス',name,model,'材料',listPrice,cost,0,'本');o.memo='渡辺パイプ 令和8年7月度 価格表';return o};
+  products.push(
+    W8K('塩ビ 水道管 VPW 20×4M','VPW20X4M',940,2540),
+    W8K('塩ビ 水道管 VPW 25×4M','VPW25X4M',1280,3610),
+    W8K('塩ビ 水道管 VPW 30×4M','VPW30X4M',1710,4450),
+    W8K('塩ビ 一般管 VP 40×4M','VP40X4M',1720,5170),
+    W8K('塩ビ 一般管 VP 50×4M','VP50X4M',2050,7230)
+  );
+  // 価格表 6〜7ページ：ACドレン（セキスイ）
+  const W8S=(name,model,cost,listPrice,unit)=>{const o=P('セキスイ',name,model,'材料',listPrice,cost,0,unit||'個');o.memo='渡辺パイプ 令和8年7月度 価格表';return o};
+  products.push(
+    W8S('ACドレンパイプ 20×4M','ACD20P',2501,4810,'本'),
+    W8S('ACドレンパイプ 25×4M','ACD25P',2798,5380,'本'),
+    W8S('ACドレンパイプ 30×4M','ACD30P',3494,6720,'本'),
+    W8S('ACドレンパイプ 40×4M','ACD40P',4550,8750,'本'),
+    W8S('ACドレンパイプ 50×4M','ACD50P',5944,11430,'本'),
+    W8S('ACドレン 90°エルボ 20','ACL20N',380,760),
+    W8S('ACドレン 90°エルボ 25','ACL25N',405,810),
+    W8S('ACドレン 90°エルボ 30','ACL30N',480,960),
+    W8S('ACドレン 90°エルボ 40','ACL40N',655,1310),
+    W8S('ACドレン 90°エルボ 50','ACL50N',770,1540),
+    W8S('ACドレン 45°エルボ 20','AC4L20N',380,760),
+    W8S('ACドレン 45°エルボ 25','AC4L25N',405,810),
+    W8S('ACドレン 45°エルボ 30','AC4L30N',480,960),
+    W8S('ACドレン 45°エルボ 40','AC4L40N',655,1310),
+    W8S('ACドレン 45°エルボ 50','AC4L50N',770,1540),
+    W8S('ACドレン ソケット 20','ACS20N',305,610),
+    W8S('ACドレン ソケット 25','ACS25N',330,660),
+    W8S('ACドレン ソケット 30','ACS30N',385,770),
+    W8S('ACドレン ソケット 40','ACS40N',550,1100),
+    W8S('ACドレン ソケット 50','ACS50N',620,1240),
+    W8S('ACドレン チーズ 20','ACT20N',455,910),
+    W8S('ACドレン チーズ 25','ACT25N',480,960),
+    W8S('ACドレン チーズ 30','ACT30N',550,1100),
+    W8S('ACドレン チーズ 40','ACT40N',770,1540),
+    W8S('ACドレン チーズ 50','ACT50N',1010,2020)
+  );
+  // 工事項目から移した部材（メーカー未指定）
+  const W8O=(name,unit,cost,price)=>{const o=P('その他',name,'','材料',0,cost,price,unit);o.memo='工事項目から移動';return o};
+  products.push(
+    W8O('化粧カバー 曲がり部材','個',1000,2500),
+    W8O('化粧カバー ジョイント','個',600,1500),
+    W8O('化粧カバー エンド','個',500,1200),
+    W8O('ドレンホース','m',300,800),
+    W8O('VV-Fケーブル','m',300,900)
+  );
+  // 価格表 8ページ：フロンガス
+  const W8G=(maker,name,model,cost,unit)=>{const o=P(maker,name,model,'材料',0,cost,0,unit||'個');o.memo='渡辺パイプ 令和8年7月度 価格表';return o};
+  products.push(
+    W8G('メキシケムJAPAN','フロンガス10kg 再充填禁止 R410A','NRC R410A',19000),
+    W8G('メキシケムJAPAN','フロンガス10kg 再充填禁止 R407C','NRC R407C',21500),
+    W8G('メキシケムJAPAN','フロンガス10kg 再充填禁止 R404A','NRC R404A',25000),
+    W8G('アオホン','フロンガス R32 NRC10kg','R32 NRC10kg',27500,'本')
+  );
   // --- 渡辺パイプ 2026年7月分 請求書（No.T4010001142571／2026/08/04発行）の仕入単価 ---
   const WI=(maker,name,model,cost,unit)=>{const o=P(maker,name,model,'材料',0,cost,0,unit||'個');o.memo='渡辺パイプ 2026年7月 請求';return o};
   const invoiceItems=[
@@ -801,15 +887,14 @@ function seed(){
     WI('クボタケミックス','DV ソケット 30','30 DS',41),
     WI('クボタケミックス','TSチーズ 30×25','30X25',211),
     WI('オーケー','ファイバリア','K-JAPK100',3120),
-    WI('オーケー','出口ドレンホース','K-DUP1G',8280,'本'),
-    WI('オーケー','空調用冷媒銅管 シングル直管 保温10mm 25.40×4M','K-HC10B',14100,'本')
+    WI('オーケー','出口ドレンホース','K-DUP1G',8280,'本')
   ];
   invoiceItems.forEach(o=>{
-    const ex=products.find(x=>x.maker===o.maker&&x.model===o.model);
+    const ex=products.find(x=>x.maker===o.maker&&x.name===o.name&&x.model===o.model);
     if(ex){ ex.cost=o.cost; ex.memo=o.memo; } else products.push(o);
   });
   // 請求書にあった単価で価格表の原価を更新（型番が同じもの）
-  [['K-HPE35E',58327],['K-HS4E',25850]].forEach(([model,cost])=>{
+  [['K-HPE35E',58327],['K-HS4E',25850],['K-HC10B',14100]].forEach(([model,cost])=>{
     const ex=products.find(x=>x.model===model); if(ex){ ex.cost=cost; ex.memo='渡辺パイプ 2026年7月 請求'; }
   });
   const wid2=n=>{const w=workItems.find(x=>x.name===n);return w?'w:'+w.id:null};
@@ -817,12 +902,12 @@ function seed(){
   const templates=[
     {id:uid(),name:'家庭用エアコン標準交換',desc:'本体＋標準取付＋配管＋真空引き＋撤去・処分',needsProduct:true,
       items:[{ref:wid('標準取付工事'),qty:1},{ref:wid('2分3分配管'),qty:4},{ref:wid('真空引き'),qty:1},{ref:wid('既設エアコン撤去'),qty:1},{ref:wid('エアコン処分'),qty:1}]},
-    {id:uid(),name:'新築エアコン取付',desc:'本体＋標準取付＋配管＋ドレン＋室外化粧カバー＋穴あけ',needsProduct:true,
-      items:[{ref:wid('標準取付工事'),qty:1},{ref:wid('2分3分配管'),qty:4},{ref:wid('ドレンホース'),qty:4},{ref:wid('室外化粧カバー'),qty:1},{ref:wid('コア穴あけ'),qty:1}]},
-    {id:uid(),name:'業務用天カセ交換',desc:'本体＋既設機撤去＋新設＋冷媒配管＋ドレン＋電気＋試運転＋廃棄',needsProduct:true,
-      items:[{ref:wid('既設エアコン撤去'),qty:1},{ref:wid('エアコン新設工事'),qty:1},{ref:wid('2分4分配管'),qty:8},{ref:wid('ドレンホース'),qty:8},{ref:wid('専用回路'),qty:1},{ref:wid('試運転・調整'),qty:1},{ref:wid('エアコン処分'),qty:1}]},
+    {id:uid(),name:'新築エアコン取付',desc:'本体＋標準取付＋配管＋室外化粧カバー＋穴あけ',needsProduct:true,
+      items:[{ref:wid('標準取付工事'),qty:1},{ref:wid('2分3分配管'),qty:4},{ref:wid('室外化粧カバー'),qty:1},{ref:wid('コア穴あけ'),qty:1}]},
+    {id:uid(),name:'業務用天カセ交換',desc:'本体＋既設機撤去＋新設＋冷媒配管＋電気＋試運転＋廃棄',needsProduct:true,
+      items:[{ref:wid('既設エアコン撤去'),qty:1},{ref:wid('エアコン新設工事'),qty:1},{ref:wid('2分4分配管'),qty:8},{ref:wid('専用回路'),qty:1},{ref:wid('試運転・調整'),qty:1},{ref:wid('エアコン処分'),qty:1}]},
     {id:uid(),name:'業務用 空調機据付配管配線工事',desc:'内訳書によくある項目を一式。数量と単価を現場に合わせて直します',needsProduct:false,
-      items:tpl([['冷媒管 15.9φ×9.6φ（保温厚10mm）',1],['継手接合材',1],['支持金物',1],['配管施工費',1],['ドレン管 VP30',1],['ドレン配管施工費',1],
+      items:tpl([['継手接合材',1],['支持金物',1],['配管施工費',1],['ドレン配管施工費',1],
         ['室内機搬入据付費 天井カセット型',1],['室外機搬入据付費',1],['室内外間制御配線工事費',1],['配管保温工事費',1],['ラッキング工事費',1],
         ['配管試験費',1],['真空引き・ガス充填費',1],['試運転調整費',1],['現場雑工事費',1],['雑材・消耗品費',1],['資材搬入運搬費',1],['諸経費（交通費含む）',1]])},
     {id:uid(),name:'業務用 空調機更新工事（撤去あり）',desc:'既設の撤去・フロン回収から新設・試運転まで',needsProduct:false,
@@ -1402,7 +1487,7 @@ function vMore(){
   const m=(act,to,t,s,extra)=>'<button class="list-btn" data-act="'+act+'" '+(to?'data-to="'+to+'"':'')+(extra||'')+'><div class="grow"><div class="t">'+t+'</div>'+(s?'<div class="s">'+s+'</div>':'')+'</div><span class="chev">›</span></button>';
   return '<div class="card" style="margin-bottom:14px"><div class="kv"><span class="k">ログイン中</span><b>'+esc(user.name)+'</b></div><div class="kv"><span class="k">権限</span><b>'+esc(user.role)+'</b></div></div>'+
     '<h2 class="sec" style="margin-top:0">アカウント</h2>'+
-    m('openMyPw','','パスワードを変更','自分のログインパスワードを変えます')+
+    (window.__SB_MODE?m('openMyPw','','パスワードを変更','自分のログインパスワードを変えます'):'')+
     m('openMyName','','氏名を変更','書類の「担当」に出る名前')+
     '<h2 class="sec">クラウド同期</h2><div class="card" id="sync-card">'+syncCardHtml()+'</div>'+
     (isAdmin()?'<div class="note" style="margin-bottom:10px">管理者はすべての操作ができます。</div>':'<div class="note" style="margin-bottom:10px">作成者は、見積と請求書の作成・自分が作ったものの編集・PDF作成ができます。削除、入金の管理、マスターと設定の変更は管理者のみです。</div>')+
@@ -1440,11 +1525,11 @@ function openStaffForm(id){
     '<div class="field"><label>権限</label><div class="seg" id="sf-role">'+ROLES.map(r=>'<button class="'+(r===st.role?'on':'')+'" data-act="sfRole" data-r="'+r+'">'+r+'</button>').join('')+'</div></div>'+
     '<div class="field"><label>在籍状況</label><div class="seg" id="sf-active"'+(isMe?' style="pointer-events:none;opacity:.55"':'')+'><button class="'+(st.active!==false?'on':'')+'" data-act="sfActive" data-v="1">在籍中</button><button class="'+(st.active===false?'on':'')+'" data-act="sfActive" data-v="0">停止中</button></div></div>'+
     (isMe?'<div class="note">ログイン中のご自身です。権限と在籍状況は変更できません。</div>':'')+
-    (id?'<h3 class="sec">パスワード</h3><div class="note" style="margin-bottom:10px">'+(st.pwReset?'最後の変更：'+whoWhen(st.pwReset):'まだ変更されていません')+'</div>'+
+    (id&&window.__SB_MODE?'<h3 class="sec">パスワード</h3><div class="note" style="margin-bottom:10px">'+(st.pwReset?'最後の変更：'+whoWhen(st.pwReset):'まだ変更されていません')+'</div>'+
       '<div class="row2"><div class="field"><label>新しいパスワード（6文字以上）</label><input class="input" type="password" id="sf-pw1"></div><div class="field"><label>もう一度入力</label><input class="input" type="password" id="sf-pw2"></div></div>'+
       '<button class="btn btn-outline btn-block" data-act="adminSetPw" data-id="'+id+'" style="margin-bottom:10px">このパスワードに変更する</button>'+
       (window.__SB_MODE?'<button class="btn btn-ghost btn-block" data-act="resetPw" data-id="'+id+'">本人に再設定メールを送る</button>':'')
-     :'<h3 class="sec">初期パスワード</h3><div class="row2"><div class="field"><label>初期パスワード（6文字以上）</label><input class="input" type="password" id="sf-pw1"></div><div class="field"><label>もう一度入力</label><input class="input" type="password" id="sf-pw2"></div></div><div class="note">本人に伝えてください。本人は「設定 → パスワードを変更」で自分で変えられます。</div>')+
+     :(window.__SB_MODE?'<h3 class="sec">初期パスワード</h3><div class="row2"><div class="field"><label>初期パスワード（6文字以上）</label><input class="input" type="password" id="sf-pw1"></div><div class="field"><label>もう一度入力</label><input class="input" type="password" id="sf-pw2"></div></div><div class="note">本人に伝えてください。本人は「設定 → パスワードを変更」で自分で変えられます。</div>':'<div class="note">試作品ではパスワードなしでログインできます。</div>'))+
     '</div>'+
     '<div class="sheet-f">'+(id&&!isMe?'<button class="btn btn-danger" data-act="delStaff" data-id="'+id+'">削除</button>':'')+'<button class="btn btn-primary" data-act="saveStaff">保存</button></div>');
 }
@@ -1475,9 +1560,11 @@ async function saveStaff(){
   }
   if(id){ Object.assign(staffById(id),{name,email,role,active}); persist(); closeSheet(); render({keepScroll:true}); toast('保存しました'); }
   else {
-    const p1=$('#sf-pw1').value, p2=$('#sf-pw2').value;
-    if(p1.length<6){ toast('初期パスワードは6文字以上にしてください'); return }
-    if(p1!==p2){ toast('パスワードの2つの入力が一致しません'); return }
+    const p1=$('#sf-pw1')?$('#sf-pw1').value:'', p2=$('#sf-pw2')?$('#sf-pw2').value:'';
+    if(window.__SB_MODE){
+      if(p1.length<6){ toast('初期パスワードは6文字以上にしてください'); return }
+      if(p1!==p2){ toast('パスワードの2つの入力が一致しません'); return }
+    }
     try{ await adminUsers('create',{email,password:p1}); }
     catch(e){
       closeSheet();
@@ -1485,9 +1572,8 @@ async function saveStaff(){
       return;
     }
     const st={id:uid(),name,email,role,active:true,pwReset:{by:user.name,at:nowIso()}};
-    if(!window.__SB_MODE) st.pwHash=sha256(p1);
     db.staff.push(st); persist(); closeSheet(); render({keepScroll:true});
-    toast(name+'さんを登録しました。初期パスワードを本人に伝えてください');
+    toast(name+'さんを登録しました'+(window.__SB_MODE?'。初期パスワードを本人に伝えてください':''));
   }
 }
 async function resetPw(id){
@@ -2156,13 +2242,12 @@ async function doLogin(asAdmin){
   loginAsAdmin=!!asAdmin;
   const em=$('#login-email').value.trim().toLowerCase(), pw=$('#login-pw').value;
   if(!window.__SB_MODE){
-    if(!em||!pw){ loginMsg('メールアドレスとパスワードを入力してください'); return }
-    const st=staffList().find(x=>x.email.toLowerCase()===em);
-    if(!st){ loginMsg('このメールアドレスは登録されていません'); return }
-    if(st.active===false){ loginMsg('このアカウントは停止中です。管理者にご確認ください'); return }
-    if(!st.pwHash){ loginMsg('パスワードが設定されていません。管理者に「設定 → スタッフと権限」で設定してもらってください'); return }
-    if(sha256(pw)!==st.pwHash){ loginMsg('メールアドレスかパスワードが違います'); return }
-    if(asAdmin&&st.role!=='管理者'){ loginMsg('このアカウントは管理者ではありません。「ログイン」からお入りください'); return }
+    // 試作品：パスワードは不要。メールが空なら権限に合う人で入る
+    const role=asAdmin?'管理者':'作成者';
+    let st=em?activeStaff().find(x=>x.email.toLowerCase()===em):null;
+    if(st&&asAdmin&&st.role!=='管理者') st=null;
+    if(!st) st=activeStaff().find(x=>x.role===role)||activeStaff()[0]||staffList()[0];
+    if(!st){ loginMsg('スタッフが登録されていません'); return }
     loginMsg(''); user=st; enterApp(); return;
   }
   if(!em||!pw){ loginMsg('メールアドレスとパスワードを入力してください'); return }
@@ -2195,23 +2280,24 @@ function openSignup(){
   openSheetRaw('<div class="sheet-h"><h2>新規アカウント作成</h2><button data-act="closeSheet">閉じる</button></div><div class="sheet-b">'+
     '<div class="field"><label>氏名</label><input class="input" id="su-name" placeholder="例：日髙 竜太" data-autofocus></div>'+
     '<div class="field"><label>メールアドレス</label><input class="input" id="su-email" inputmode="email" value="'+esc($('#login-email').value.trim())+'"></div>'+
-    '<div class="row2"><div class="field"><label>パスワード（6文字以上）</label><input class="input" type="password" id="su-pw1"></div><div class="field"><label>もう一度入力</label><input class="input" type="password" id="su-pw2"></div></div>'+
-    '<div class="note" id="su-msg">'+(window.__SB_MODE?'最初に作成した人が管理者になります。2人目からは「作成者」として登録され、権限の変更は管理者が行います。':'試作品では登録するとすぐログインできます。')+'</div></div>'+
+(window.__SB_MODE?'<div class="row2"><div class="field"><label>パスワード（6文字以上）</label><input class="input" type="password" id="su-pw1"></div><div class="field"><label>もう一度入力</label><input class="input" type="password" id="su-pw2"></div></div>':'')+
+    '<div class="note" id="su-msg">'+(window.__SB_MODE?'新しく作成した方は「作成者」として登録されます。権限の変更は管理者が行います。':'試作品では登録するとすぐログインできます（パスワードは不要です）。')+'</div></div>'+
     '<div class="sheet-f"><button class="btn btn-primary" data-act="doSignup">アカウントを作成</button></div>');
 }
 async function doSignup(){
-  const name=$('#su-name').value.trim(), em=$('#su-email').value.trim().toLowerCase(), p1=$('#su-pw1').value, p2=$('#su-pw2').value, m=$('#su-msg');
+  const name=$('#su-name').value.trim(), em=$('#su-email').value.trim().toLowerCase(), p1=$('#su-pw1')?$('#su-pw1').value:'', p2=$('#su-pw2')?$('#su-pw2').value:'', m=$('#su-msg');
   const say=t=>{ m.textContent=t; m.style.color='var(--red)'; };
   if(!name){ say('氏名を入力してください'); return }
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){ say('メールアドレスを正しく入力してください'); return }
-  if(p1.length<6){ say('パスワードは6文字以上にしてください'); return }
-  if(p1!==p2){ say('パスワードが一致しません'); return }
+  if(window.__SB_MODE){
+    if(p1.length<6){ say('パスワードは6文字以上にしてください'); return }
+    if(p1!==p2){ say('パスワードが一致しません'); return }
+  }
   if(!window.__SB_MODE){
     if(!db) await loadDb();
     let st=staffList().find(s=>s.email.toLowerCase()===em);
-    if(st&&st.pwHash){ say('このメールアドレスは登録済みです。ログインしてください'); return }
-    if(!st){ st={id:uid(),name,email:em,role:'作成者',active:true,pwReset:null}; db.staff.push(st); }
-    st.pwHash=sha256(p1); if(!st.name) st.name=name; persist();
+    if(st){ say('このメールアドレスは登録済みです。ログインしてください'); return }
+    st={id:uid(),name,email:em,role:'作成者',active:true,pwReset:null}; db.staff.push(st); persist();
     user=st; closeSheet(); enterApp(); toast('アカウントを作成しました'); return;
   }
   try{
@@ -2310,7 +2396,9 @@ async function setNewPw(){
     }catch(e){ loginMsg('クラウドに接続できません。config.js の設定と通信を確認してください'); }
     return;
   }
-  await loadDb(); $('#login-email').value=(activeStaff()[0]||{}).email||'';
+  await loadDb();
+  const pwWrap=$('#login-pw-wrap'); if(pwWrap) pwWrap.style.display='none';
+  $('#login-email').value='';
 })();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
 
