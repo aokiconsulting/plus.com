@@ -507,7 +507,7 @@ const isMine=d=>!!user&&!!d&&d.staffId===user.id;
 const canEditDoc=d=>isAdmin()||isMine(d)||(!!user&&!!d&&d.createdBy===user.id);
 function denied(){ toast('この操作は管理者のみです'); }
 let db=null, user=null, route={name:'home',params:{}}, hist=[], wiz=null;
-let masterTab='work', masterQ='', estFilter='すべて', invFilter='すべて', sheetState=null, persistT=null, loginRole='管理者';
+let masterTab='work', masterQ='', masterCat='', masterGroup='', masterSub='', estFilter='すべて', invFilter='すべて', sheetState=null, persistT=null, loginRole='管理者';
 
 const ICON={
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>'
@@ -632,6 +632,21 @@ function shortName(n){ const t=String(n||'').split(/[ 　]/)[0]; return t.length
 
 /* ===== 初期データ（単価・原価はすべて仮の数字） ===== */
 const PRICE_REV='2026-07b';
+const PRODUCT_GROUPS=['エアコン本体','冷媒管','ドレン','保温・ラッキング','化粧カバー','電線・ケーブル','金具・その他','フロンガス'];
+const PRODUCT_SUBS={'ドレン':['ドレン（VP）','ドレン（AC）','ドレン（KC）','ドレン（カラーパイプ）','ドレン（断熱ドレンホース）','ドレン（カフス）']};
+function classifyProduct(p){
+  const n=p.name||'', mk=p.maker||'';
+  if(/断熱ドレンホース|出口ドレンホース/.test(n)||/^ドレンホース/.test(n)) return {group:'ドレン',sub:'ドレン（断熱ドレンホース）'};
+  if(mk==='セキスイ'||mk==='トウエイ') return {group:'ドレン',sub:'ドレン（AC）'};
+  if(mk==='クボタケミックス') return {group:'ドレン',sub:'ドレン（VP）'};
+  if(/フロンガス/.test(n)) return {group:'フロンガス',sub:''};
+  if(/冷媒銅管|ペアコイル/.test(n)) return {group:'冷媒管',sub:''};
+  if(/化粧カバー/.test(n)) return {group:'化粧カバー',sub:''};
+  if(/VV-F|ケーブル/.test(n)) return {group:'電線・ケーブル',sub:''};
+  if(/ラッキング|ラクエル|ファイバリア|保温材/.test(n)) return {group:'保温・ラッキング',sub:''};
+  if(p.cat==='材料') return {group:'金具・その他',sub:''};
+  return {group:'エアコン本体',sub:''};
+}
 const ITEM_REV='2026-09';
 const MOVED_TO_PRODUCTS=[
   ['配管','ドレンホース'],['配管','VV-Fケーブル'],
@@ -643,7 +658,7 @@ const MOVED_TO_PRODUCTS=[
 ];
 function mergeProducts(){
   if(!db||!db.products) return;
-  db.products.forEach(p=>{ if(!p.unit) p.unit='台' });
+  db.products.forEach(p=>{ if(!p.unit) p.unit='台'; if(!p.group){ const g=classifyProduct(p); p.group=g.group; p.sub=g.sub; } });
   const base=seed().products, key=p=>[p.maker,p.name,p.model].join('\u0001'), have=new Set(db.products.map(key));
   base.forEach(p=>{ if(!have.has(key(p))) db.products.push(p); });
   // 仕入価格の改定分は、同じメーカー＋型番の原価を上書きする（1回だけ）
@@ -897,6 +912,7 @@ function seed(){
   [['K-HPE35E',58327],['K-HS4E',25850],['K-HC10B',14100]].forEach(([model,cost])=>{
     const ex=products.find(x=>x.model===model); if(ex){ ex.cost=cost; ex.memo='渡辺パイプ 2026年7月 請求'; }
   });
+  products.forEach(p=>{ const g=classifyProduct(p); p.group=p.group||g.group; p.sub=p.sub||g.sub; });
   const wid2=n=>{const w=workItems.find(x=>x.name===n);return w?'w:'+w.id:null};
   const tpl=(arr)=>arr.map(a=>({ref:wid2(a[0]),qty:a[1]})).filter(x=>x.ref);
   const templates=[
@@ -1187,9 +1203,9 @@ function loadXLSX(){
   return xlsxReady;
 }
 const WORK_COLS=['分類','工事名','単位','単価','原価'];
-const PROD_COLS=['メーカー','商品名','型番','カテゴリ','単位','定価','仕入原価','標準販売価格','税区分','備考'];
+const PROD_COLS=['メーカー','商品名','型番','カテゴリ','グループ','小分類','単位','定価','仕入原価','標準販売価格','税区分','備考'];
 function workRows(){ return db.workItems.map(w=>({'分類':w.cat,'工事名':w.name,'単位':w.unit,'単価':Number(w.price)||0,'原価':Number(w.cost)||0})); }
-function prodRows(){ return db.products.map(p=>({'メーカー':p.maker,'商品名':p.name,'型番':p.model,'カテゴリ':p.cat,'単位':p.unit||'台','定価':Number(p.listPrice)||0,'仕入原価':Number(p.cost)||0,'標準販売価格':Number(p.price)||0,'税区分':p.taxType||'課税','備考':p.memo||''})); }
+function prodRows(){ return db.products.map(p=>({'メーカー':p.maker,'商品名':p.name,'型番':p.model,'カテゴリ':p.cat,'グループ':p.group||'','小分類':p.sub||'','単位':p.unit||'台','定価':Number(p.listPrice)||0,'仕入原価':Number(p.cost)||0,'標準販売価格':Number(p.price)||0,'税区分':p.taxType||'課税','備考':p.memo||''})); }
 function dlBlob(blob,name){
   const url=URL.createObjectURL(blob), a=document.createElement('a');
   a.href=url; a.download=name; a.style.display='none'; document.body.appendChild(a); a.click();
@@ -1265,7 +1281,7 @@ async function importMasters(file){
   prod.forEach(r=>{
     const maker=String(r['メーカー']||'').trim(), name=String(r['商品名']||'').trim(), model=String(r['型番']||'').trim(); if(!name) return;
     const ex=db.products.find(p=>p.maker===maker&&p.name===name&&p.model===model);
-    const o={maker,name,model,cat:String(r['カテゴリ']||'家庭用').trim(),unit:String(r['単位']||'台').trim()||'台',listPrice:num(r['定価']),cost:num(r['仕入原価']),price:num(r['標準販売価格']),taxType:String(r['税区分']||'課税').trim(),memo:String(r['備考']||'').trim()};
+    const o={maker,name,model,cat:String(r['カテゴリ']||'家庭用').trim(),group:String(r['グループ']||'').trim(),sub:String(r['小分類']||'').trim(),unit:String(r['単位']||'台').trim()||'台',listPrice:num(r['定価']),cost:num(r['仕入原価']),price:num(r['標準販売価格']),taxType:String(r['税区分']||'課税').trim(),memo:String(r['備考']||'').trim()};
     if(ex) plan.prodUpd.push([ex,o]); else plan.prodAdd.push(o);
   });
   const total=plan.workAdd.length+plan.workUpd.length+plan.prodAdd.length+plan.prodUpd.length;
@@ -1598,30 +1614,53 @@ function delStaff(id){
     (used?'このスタッフが担当している見積・請求書があります。削除すると担当者名が表示されなくなります。退職した方は「停止中」にしておくと、過去の書類に名前が残ります。':'このスタッフを削除します。元に戻せません。')+
     '</p></div><div class="sheet-f"><button class="btn btn-ghost" data-act="closeSheet">やめる</button><button class="btn btn-danger" style="flex:1" data-act="delStaffOk" data-id="'+id+'">削除する</button></div>');
 }
+function mNavRow(kind,val,label,count){
+  return '<button class="list-btn" data-act="masterNav" data-k="'+kind+'" data-v="'+esc(val)+'"><div class="grow"><div class="t">'+esc(label)+'</div><div class="s">'+count+' 件</div></div><span class="chev">›</span></button>';
+}
+function mWorkRow(w){
+  return '<button class="list-btn" data-act="openMaster" data-kind="work" data-id="'+w.id+'"><div class="grow"><div class="t">'+esc(w.name)+'</div><div class="s">'+esc(w.cat)+'　単位：'+esc(w.unit)+(isAdmin()?'　原価 '+yen(w.cost):'')+'</div></div><div class="price">'+yen(w.price)+'</div>'+(isAdmin()?'<span class="chev">›</span>':'')+'</button>';
+}
+function mProdRow(p){
+  return '<button class="list-btn" data-act="openMaster" data-kind="product" data-id="'+p.id+'"><div class="grow"><div class="t">'+esc(p.maker?p.maker+' '+p.name:p.name)+'</div><div class="s">'+esc(p.model)+'　'+esc(p.sub||p.group||p.cat)+'　単位：'+esc(p.unit||'台')+(isAdmin()?'　原価 '+yen(p.cost):'')+'</div></div><div class="price">'+yen(p.price)+'</div>'+(isAdmin()?'<span class="chev">›</span>':'')+'</button>';
+}
+function masterCrumb(){
+  if(masterQ.trim()) return '';
+  const parts=[];
+  if(masterTab==='work'){ if(masterCat) parts.push(masterCat); }
+  else { if(masterGroup) parts.push(masterGroup); if(masterSub) parts.push(masterSub); }
+  if(!parts.length) return '';
+  return '<div id="master-crumb" style="display:flex;align-items:center;gap:8px;margin:2px 0 8px"><button class="link" data-act="masterBack">‹ 戻る</button><span class="note">'+esc(parts.join(' ／ '))+'</span></div>';
+}
 function masterListHtml(){
   const k=masterQ.trim().toLowerCase();
-  if(masterTab==='work'){
-    const cats=[...new Set(db.workItems.map(w=>w.cat))];
-    return cats.map(cat=>{
-      const rows=db.workItems.filter(w=>w.cat===cat&&(!k||(w.name+w.cat).toLowerCase().includes(k)));
-      if(!rows.length) return '';
-      return '<h2 class="sec">'+esc(cat)+'</h2>'+rows.map(w=>'<button class="list-btn" data-act="openMaster" data-kind="work" data-id="'+w.id+'"><div class="grow"><div class="t">'+esc(w.name)+'</div><div class="s">単位：'+esc(w.unit)+(isAdmin()?'　原価 '+yen(w.cost):'')+'</div></div><div class="price">'+yen(w.price)+'</div>'+(isAdmin()?'<span class="chev">›</span>':'')+'</button>').join('');
-    }).join('')||'<div class="empty">該当なし</div>';
+  if(k){
+    if(masterTab==='work'){
+      const rows=db.workItems.filter(w=>(w.name+w.cat).toLowerCase().includes(k));
+      return rows.map(mWorkRow).join('')||'<div class="empty">該当なし</div>';
+    }
+    const rows=db.products.filter(p=>(p.maker+p.name+p.model+p.cat+(p.group||'')+(p.sub||'')).toLowerCase().includes(k));
+    return rows.map(mProdRow).join('')||'<div class="empty">該当なし</div>';
   }
-  const makers=[...new Set(db.products.map(p=>p.maker))];
-  return makers.map(mk=>{
-    const rows=db.products.filter(p=>p.maker===mk&&(!k||(p.maker+p.name+p.model+p.cat).toLowerCase().includes(k)));
-    if(!rows.length) return '';
-    return '<h2 class="sec">'+esc(mk)+'</h2>'+rows.map(p=>'<button class="list-btn" data-act="openMaster" data-kind="product" data-id="'+p.id+'"><div class="grow"><div class="t">'+esc(p.name)+'</div><div class="s">'+esc(p.model)+'　'+esc(p.cat)+'　単位：'+esc(p.unit||'台')+(isAdmin()?'　原価 '+yen(p.cost):'')+'</div></div><div class="price">'+yen(p.price)+'</div>'+(isAdmin()?'<span class="chev">›</span>':'')+'</button>').join('');
-  }).join('')||'<div class="empty">該当なし</div>';
+  if(masterTab==='work'){
+    if(!masterCat) return workCats().map(c=>mNavRow('cat',c,c,db.workItems.filter(w=>w.cat===c).length)).join('')||'<div class="empty">まだ登録がありません</div>';
+    const rows=db.workItems.filter(w=>w.cat===masterCat);
+    return rows.map(mWorkRow).join('')||'<div class="empty">この分類にはまだ登録がありません</div>';
+  }
+  if(!masterGroup) return prodGroups().map(g=>mNavRow('group',g,g,db.products.filter(p=>(p.group||'金具・その他')===g).length)).join('')||'<div class="empty">まだ登録がありません</div>';
+  const subs=prodSubs(masterGroup);
+  if(subs.length&&!masterSub) return subs.map(sb=>mNavRow('sub',sb,sb,db.products.filter(p=>(p.group||'')===masterGroup&&p.sub===sb).length)).join('');
+  const rows=db.products.filter(p=>(p.group||'金具・その他')===masterGroup&&(!subs.length||p.sub===masterSub));
+  return rows.map(mProdRow).join('')||'<div class="empty">ここにはまだ登録がありません</div>';
 }
+
 function vMasters(){
   return '<div class="seg" style="margin-bottom:12px"><button class="'+(masterTab==='work'?'on':'')+'" data-act="masterTab" data-tab="work">工事項目</button><button class="'+(masterTab==='product'?'on':'')+'" data-act="masterTab" data-tab="product">商品（エアコン本体など）</button></div>'+
     (isAdmin()?'<button class="btn btn-outline btn-block" data-act="newMaster" data-kind="'+masterTab+'" style="margin-bottom:10px">＋ '+(masterTab==='work'?'工事項目を登録':'商品を登録')+'</button>'+
       '<div class="btn-grid" style="margin:0 0 12px"><button class="btn btn-ghost" data-act="exportMasters">Excelで書き出す</button>'+
       '<label class="btn btn-ghost" style="cursor:pointer">Excelから取り込む<input type="file" accept=".xlsx,.xls,.csv" data-import="masters" style="display:none"></label></div>':'')+
     '<div class="search">'+ICON.search+'<input class="input" placeholder="名前で絞り込み" value="'+esc(masterQ)+'" data-live="masterq"></div>'+
-    '<div class="note" style="margin-bottom:4px">'+(isAdmin()?'単価・原価は仮の数字です。タップして実際の金額に直してください。':'単価の確認ができます。登録と変更は管理者のみです。')+'</div>'+
+    masterCrumb()+
+    '<div class="note" style="margin-bottom:4px">'+(isAdmin()?'分類を選ぶと中身が出ます。タップすると金額を直せます。':'分類を選ぶと単価を確認できます。登録と変更は管理者のみです。')+'</div>'+
     '<div id="master-list">'+masterListHtml()+'</div>';
 }
 function vTemplates(){
@@ -1844,26 +1883,63 @@ function makeItem(ref,qty){
   const pr=db.products.find(x=>x.id===id); if(!pr) return null; return {id:uid(),name:pr.maker+' '+pr.name,desc:pr.model,qty:qty||1,unit:pr.unit||'台',price:pr.price,cost:pr.cost};
 }
 function pickRow(ref,t,s,price){ return '<button class="pick" data-act="pickItem" data-ref="'+ref+'"><div class="grow"><div class="t">'+esc(t)+'</div><div class="s">'+esc(s)+'</div></div><div class="price">'+yen(price)+'</div><div class="plus">＋</div></button>'; }
-function itemResults(){
-  const k=(sheetState.q||'').trim().toLowerCase(), tab=sheetState.tab, out=[];
-  if(tab!=='product') db.workItems.filter(w=>!k||(w.cat+w.name).toLowerCase().includes(k)).forEach(w=>out.push(pickRow('w:'+w.id,w.name,w.cat+'　単位：'+w.unit,w.price)));
-  if(tab!=='work') db.products.filter(p=>!k||(p.maker+p.name+p.model+p.cat).toLowerCase().includes(k)).forEach(p=>out.push(pickRow('p:'+p.id,p.maker+' '+p.name,p.model+'　'+p.cat,p.price)));
-  return out.join('')||'<div class="empty">見つかりません。<br>下の「登録して追加」ボタンからその場で登録できます。</div>';
+function navRow(kind,val,label,count){
+  return '<button class="list-btn" data-act="itemNav" data-k="'+kind+'" data-v="'+esc(val)+'"><div class="grow"><div class="t">'+esc(label)+'</div><div class="s">'+count+' 件</div></div><span class="chev">›</span></button>';
 }
-function openItemSearch(q,tab){
-  sheetState={q:q||'',tab:tab||'all',added:0};
-  openSheetRaw('<div class="sheet-h"><h2>商品・工事を追加</h2><button data-act="closeSheet">完了</button></div><div class="sheet-b">'+
-    '<div class="search">'+ICON.search+'<input class="input" placeholder="例：ダイキン、配管、化粧カバー" value="'+esc(sheetState.q)+'" data-live="itemq" data-autofocus></div>'+
+function workCats(){ const o=[]; db.workItems.forEach(w=>{ if(o.indexOf(w.cat)<0) o.push(w.cat) }); return o; }
+function prodGroups(){ const o=PRODUCT_GROUPS.slice(); db.products.forEach(p=>{ const g=p.group||'金具・その他'; if(o.indexOf(g)<0) o.push(g) }); return o; }
+function prodSubs(group){ const o=(PRODUCT_SUBS[group]||[]).slice(); db.products.filter(p=>(p.group||'')===group).forEach(p=>{ if(p.sub&&o.indexOf(p.sub)<0) o.push(p.sub) }); return o; }
+function itemCrumb(){
+  const st=sheetState, parts=[];
+  if(st.tab==='work'){ parts.push('工事'); if(st.cat) parts.push(st.cat); }
+  else if(st.tab==='product'){ parts.push('商品'); if(st.group) parts.push(st.group); if(st.sub) parts.push(st.sub); }
+  if(parts.length<2) return '';
+  return '<div style="display:flex;align-items:center;gap:8px;margin:2px 0 8px"><button class="link" data-act="itemBack">‹ 戻る</button><span class="note">'+esc(parts.join(' ／ '))+'</span></div>';
+}
+function itemResults(){
+  const st=sheetState, k=(st.q||'').trim().toLowerCase(), out=[];
+  if(k){ // 検索中はすべてから探す
+    db.workItems.filter(w=>(w.cat+w.name).toLowerCase().includes(k)).forEach(w=>out.push(pickRow('w:'+w.id,w.name,w.cat+'　単位：'+w.unit,w.price)));
+    db.products.filter(p=>(p.maker+p.name+p.model+p.cat+(p.group||'')+(p.sub||'')).toLowerCase().includes(k)).forEach(p=>out.push(pickRow('p:'+p.id,p.maker+' '+p.name,p.model+'　'+(p.sub||p.group||p.cat)+'　単位：'+(p.unit||'台'),p.price)));
+    return out.join('')||'<div class="empty">見つかりません。<br>下の「登録して追加」ボタンからその場で登録できます。</div>';
+  }
+  if(st.tab==='all'){
+    db.workItems.forEach(w=>out.push(pickRow('w:'+w.id,w.name,w.cat+'　単位：'+w.unit,w.price)));
+    db.products.forEach(p=>out.push(pickRow('p:'+p.id,p.maker+' '+p.name,p.model+'　'+(p.sub||p.group||p.cat),p.price)));
+    return out.join('');
+  }
+  if(st.tab==='work'){
+    if(!st.cat) return workCats().map(c=>navRow('cat',c,c,db.workItems.filter(w=>w.cat===c).length)).join('');
+    const rows=db.workItems.filter(w=>w.cat===st.cat);
+    return rows.map(w=>pickRow('w:'+w.id,w.name,'単位：'+w.unit,w.price)).join('')||'<div class="empty">この分類にはまだ登録がありません。</div>';
+  }
+  // 商品
+  if(!st.group) return prodGroups().map(g=>navRow('group',g,g,db.products.filter(p=>(p.group||'金具・その他')===g).length)).join('');
+  const subs=prodSubs(st.group);
+  if(subs.length&&!st.sub) return subs.map(sb=>navRow('sub',sb,sb,db.products.filter(p=>(p.group||'')===st.group&&p.sub===sb).length)).join('');
+  const rows=db.products.filter(p=>(p.group||'金具・その他')===st.group&&(!subs.length||p.sub===st.sub));
+  return rows.map(p=>pickRow('p:'+p.id,p.maker+' '+p.name,p.model+'　単位：'+(p.unit||'台'),p.price)).join('')||'<div class="empty">ここにはまだ登録がありません。<br>下の「登録して追加」ボタンから登録できます。</div>';
+}
+function itemSearchBody(){
+  return '<div class="search">'+ICON.search+'<input class="input" placeholder="例：ダイキン、配管、ドレン" value="'+esc(sheetState.q)+'" data-live="itemq"></div>'+
     '<div class="seg" style="margin-bottom:8px">'+[['all','すべて'],['work','工事'],['product','商品']].map(x=>'<button class="'+(sheetState.tab===x[0]?'on':'')+'" data-act="itemTab" data-tab="'+x[0]+'">'+x[1]+'</button>').join('')+'</div>'+
+    itemCrumb()+
     '<div class="note" style="margin-bottom:4px">タップするとすぐ明細に入ります。続けて何件でも追加できます。</div>'+
-    '<div id="item-results">'+itemResults()+'</div></div>'+
+    '<div id="item-results">'+itemResults()+'</div>';
+}
+function refreshItemSearch(){ const b=$('#sheet-root .sheet-b'); if(b) b.innerHTML=itemSearchBody(); }
+function openItemSearch(q,tab,group,sub){
+  sheetState={q:q||'',tab:tab||'all',cat:'',group:group||'',sub:sub||'',added:0};
+  openSheetRaw('<div class="sheet-h"><h2>商品・工事を追加</h2><button data-act="closeSheet">完了</button></div><div class="sheet-b">'+itemSearchBody()+'</div>'+
     '<div class="sheet-f"><button class="btn btn-outline" data-act="newItemForm">＋ 見つからない商品・工事を登録して追加</button></div>');
 }
+
 /* 見積作成中にその場で商品・工事を登録 */
 function openNewItemForm(){
   const prevQ=sheetState?sheetState.q||'':'', prevTab=sheetState?sheetState.tab||'all':'all';
+  const prevGroup=sheetState?sheetState.group||'':'', prevSub=sheetState?sheetState.sub||'':'';
   const kind=prevTab==='work'?'work':'product';
-  sheetState={newItem:true,kind,prevQ,prevTab};
+  sheetState={newItem:true,kind,prevQ,prevTab,prevGroup,prevSub,group:prevGroup,sub:prevSub};
   openSheetRaw('<div class="sheet-h"><h2>新しく登録して追加</h2><button data-act="backToSearch">戻る</button></div><div class="sheet-b" id="ni-body">'+newItemBody(kind,prevQ)+'</div>'+
     '<div class="sheet-f"><button class="btn btn-primary" data-act="saveNewItem">登録して明細に追加</button></div>');
 }
@@ -1874,7 +1950,9 @@ function newItemBody(kind,q){
   if(kind==='product'){
     f+='<div class="field"><label>メーカー</label><input class="input" id="ni-maker" list="ni-makers" placeholder="例：ダイキン"><datalist id="ni-makers">'+makers.map(c=>'<option value="'+c+'">').join('')+'</datalist></div>'+
        '<div class="field"><label>商品名</label><input class="input" id="ni-name" value="'+esc(q)+'" placeholder="例：壁掛形 6畳用" data-autofocus></div>'+
-       '<div class="row2"><div class="field"><label>型番</label><input class="input" id="ni-model"></div><div class="field"><label>カテゴリ</label><select class="input" id="ni-cat">'+['家庭用','業務用','その他'].map(c=>'<option>'+c+'</option>').join('')+'</select></div></div>';
+       '<div class="row2"><div class="field"><label>型番</label><input class="input" id="ni-model"></div><div class="field"><label>カテゴリ</label><select class="input" id="ni-cat">'+['家庭用','業務用','材料','その他'].map(c=>'<option '+(c==='材料'&&sheetState&&sheetState.group?'selected':'')+'>'+c+'</option>').join('')+'</select></div></div>'+
+       '<div class="row2"><div class="field"><label>グループ</label><input class="input" id="ni-group" list="ni-groups" value="'+esc((sheetState&&sheetState.group)||'')+'"><datalist id="ni-groups">'+PRODUCT_GROUPS.map(g=>'<option value="'+esc(g)+'">').join('')+'</datalist></div>'+
+       '<div class="field"><label>小分類</label><input class="input" id="ni-sub" list="ni-subs" value="'+esc((sheetState&&sheetState.sub)||'')+'"><datalist id="ni-subs">'+Object.keys(PRODUCT_SUBS).reduce((a,k)=>a.concat(PRODUCT_SUBS[k]),[]).map(g=>'<option value="'+esc(g)+'">').join('')+'</datalist></div></div>';
   } else {
     f+='<div class="field"><label>分類</label><input class="input" id="ni-cat" list="ni-cats" placeholder="例：配管"><datalist id="ni-cats">'+cats.map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist></div>'+
        '<div class="field"><label>工事名</label><input class="input" id="ni-name" value="'+esc(q)+'" placeholder="例：配管延長" data-autofocus></div>';
@@ -1892,7 +1970,7 @@ function saveNewItem(){
   if(kind==='product'){
     const maker=$('#ni-maker').value.trim(), model=$('#ni-model').value.trim(), cat=$('#ni-cat').value;
     it={id:uid(),name:(maker?maker+' ':'')+name,desc:model,qty,unit,price,cost};
-    if(toMaster) db.products.push({id:uid(),maker,name,model,cat,unit,listPrice:0,cost,price,taxType:'課税',memo:''});
+    if(toMaster) db.products.push({id:uid(),maker,name,model,cat,group:($('#ni-group')?$('#ni-group').value.trim():''),sub:($('#ni-sub')?$('#ni-sub').value.trim():''),unit,listPrice:0,cost,price,taxType:'課税',memo:''});
   } else {
     const cat=$('#ni-cat').value.trim()||'その他';
     it={id:uid(),name,desc:'',qty,unit,price,cost};
@@ -1972,7 +2050,7 @@ function openMasterForm(kind,id){
   if(!isAdmin()){ denied(); return }
   sheetState={kind,id:id||null};
   if(kind==='work'){
-    const w=id?db.workItems.find(x=>x.id===id):{cat:'',name:'',unit:'式',price:'',cost:''};
+    const w=id?db.workItems.find(x=>x.id===id):{cat:masterCat||'',name:'',unit:'式',price:'',cost:''};
     const cats=[...new Set(db.workItems.map(x=>x.cat))];
     openSheetRaw('<div class="sheet-h"><h2>'+(id?'工事項目の編集':'工事項目を登録')+'</h2><button data-act="closeSheet">閉じる</button></div><div class="sheet-b">'+
       '<div class="field"><label>分類</label><input class="input" id="m-cat" list="m-cats" value="'+esc(w.cat)+'" placeholder="例：配管"><datalist id="m-cats">'+cats.map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist></div>'+
@@ -1981,12 +2059,14 @@ function openMasterForm(kind,id){
       '<div class="field"><label>原価（円・社内用）</label><input type="number" inputmode="numeric" class="input" id="m-cost" value="'+w.cost+'"></div></div>'+
       '<div class="sheet-f">'+(id?'<button class="btn btn-danger" data-act="delMaster">削除</button>':'')+'<button class="btn btn-primary" data-act="saveMaster">保存</button></div>');
   } else {
-    const p=id?db.products.find(x=>x.id===id):{maker:'',name:'',model:'',cat:'家庭用',unit:'台',listPrice:'',cost:'',price:'',taxType:'課税',memo:''};
+    const p=id?db.products.find(x=>x.id===id):{maker:'',name:'',model:'',cat:masterGroup&&masterGroup!=='エアコン本体'?'材料':'家庭用',group:masterGroup||'',sub:masterSub||'',unit:'台',listPrice:'',cost:'',price:'',taxType:'課税',memo:''};
     const makers=['ダイキン','三菱電機','日立','パナソニック','富士通ゼネラル','東芝','シャープ'];
     openSheetRaw('<div class="sheet-h"><h2>'+(id?'商品の編集':'商品を登録')+'</h2><button data-act="closeSheet">閉じる</button></div><div class="sheet-b">'+
       '<div class="field"><label>メーカー</label><input class="input" id="m-maker" list="m-makers" value="'+esc(p.maker)+'"><datalist id="m-makers">'+makers.map(c=>'<option value="'+c+'">').join('')+'</datalist></div>'+
       '<div class="field"><label>商品名</label><input class="input" id="m-name" value="'+esc(p.name)+'" placeholder="例：壁掛形 6畳用" data-autofocus></div>'+
       '<div class="row2"><div class="field"><label>型番</label><input class="input" id="m-model" value="'+esc(p.model)+'"></div><div class="field"><label>カテゴリ</label><select class="input" id="m-cat">'+['家庭用','業務用','材料','その他'].map(c=>'<option '+(c===p.cat?'selected':'')+'>'+c+'</option>').join('')+'</select></div></div>'+
+      '<div class="row2"><div class="field"><label>グループ</label><input class="input" id="m-group" list="m-groups" value="'+esc(p.group||'')+'"><datalist id="m-groups">'+PRODUCT_GROUPS.map(g=>'<option value="'+esc(g)+'">').join('')+'</datalist></div>'+
+      '<div class="field"><label>小分類</label><input class="input" id="m-sub" list="m-subs" value="'+esc(p.sub||'')+'"><datalist id="m-subs">'+Object.keys(PRODUCT_SUBS).reduce((a,k)=>a.concat(PRODUCT_SUBS[k]),[]).map(g=>'<option value="'+esc(g)+'">').join('')+'</datalist></div></div>'+
       '<div class="field"><label>単位</label><select class="input" id="m-unit2">'+UNITS.map(u=>'<option '+(u===(p.unit||'台')?'selected':'')+'>'+u+'</option>').join('')+'</select></div>'+
       '<div class="row2"><div class="field"><label>定価（円）</label><input type="number" inputmode="numeric" class="input" id="m-list" value="'+p.listPrice+'"></div><div class="field"><label>仕入原価（円）</label><input type="number" inputmode="numeric" class="input" id="m-cost" value="'+p.cost+'"></div></div>'+
       '<div class="row2"><div class="field"><label>標準販売価格（円）</label><input type="number" inputmode="numeric" class="input" id="m-price" value="'+p.price+'"></div><div class="field"><label>税区分</label><select class="input" id="m-tax">'+['課税','非課税'].map(c=>'<option '+(c===p.taxType?'selected':'')+'>'+c+'</option>').join('')+'</select></div></div>'+
@@ -2001,7 +2081,7 @@ function saveMaster(){
     const o={cat:$('#m-cat').value.trim()||'その他',name:nm,unit:$('#m-unit').value,price:Number($('#m-price').value)||0,cost:Number($('#m-cost').value)||0};
     if(id) Object.assign(db.workItems.find(x=>x.id===id),o); else db.workItems.push(Object.assign({id:uid()},o));
   } else {
-    const o={maker:$('#m-maker').value.trim(),name:nm,model:$('#m-model').value.trim(),cat:$('#m-cat').value,unit:$('#m-unit2')?$('#m-unit2').value:'台',listPrice:Number($('#m-list').value)||0,cost:Number($('#m-cost').value)||0,price:Number($('#m-price').value)||0,taxType:$('#m-tax').value,memo:$('#m-memo').value.trim()};
+    const o={maker:$('#m-maker').value.trim(),name:nm,model:$('#m-model').value.trim(),cat:$('#m-cat').value,group:$('#m-group')?$('#m-group').value.trim():'',sub:$('#m-sub')?$('#m-sub').value.trim():'',unit:$('#m-unit2')?$('#m-unit2').value:'台',listPrice:Number($('#m-list').value)||0,cost:Number($('#m-cost').value)||0,price:Number($('#m-price').value)||0,taxType:$('#m-tax').value,memo:$('#m-memo').value.trim()};
     if(id) Object.assign(db.products.find(x=>x.id===id),o); else db.products.push(Object.assign({id:uid()},o));
   }
   persist(); closeSheet(); render({keepScroll:true}); toast('保存しました');
@@ -2156,12 +2236,15 @@ const A={
   selectCustomer:d=>{ wiz.est.customerId=d.id; saveDraft(); if(wiz.from5){ wiz.from5=false; wiz.step=5; } else wiz.step=2; render(); },
   newCustomer:d=>openCustomerForm(null,d.select==='1'),
   copySiteAddr:()=>{ const cu=cust(wiz.est.customerId); if(!cu) return; wiz.est.siteAddress=cu.address||''; if(!wiz.est.siteName) wiz.est.siteName=cu.type==='法人'?cu.company:cu.name+'様邸'; saveDraft(); render({keepScroll:true}); },
-  addItemSearch:()=>openItemSearch('','all'), itemTab:d=>{ sheetState.tab=d.tab; document.querySelectorAll('#sheet-root .seg button').forEach(b=>b.classList.toggle('on',b.dataset.tab===d.tab)); $('#item-results').innerHTML=itemResults(); },
+  addItemSearch:()=>openItemSearch('','all'),
+  itemTab:d=>{ sheetState.tab=d.tab; sheetState.cat=''; sheetState.group=''; sheetState.sub=''; refreshItemSearch(); },
+  itemNav:d=>{ if(d.k==='cat') sheetState.cat=d.v; else if(d.k==='group'){ sheetState.group=d.v; sheetState.sub=''; } else sheetState.sub=d.v; refreshItemSearch(); },
+  itemBack:()=>{ const st=sheetState; if(st.sub) st.sub=''; else if(st.group) st.group=''; else if(st.cat) st.cat=''; refreshItemSearch(); },
   addTemplate:()=>openTemplates(), pickItem:d=>pickItem(d.ref), pickTemplate:d=>pickTemplate(d.id),
   editItem:d=>openItemEdit(+d.i), delItem:d=>{ wiz.est.items.splice(+d.i,1); saveDraft(); render({keepScroll:true}); toast('削除しました'); },
   closeSheet:()=>closeSheet(), saveItem:()=>saveItem(), removeItem:()=>removeItem(),
   newItemForm:()=>openNewItemForm(), saveNewItem:()=>saveNewItem(),
-  backToSearch:()=>{ const st=sheetState||{}; openItemSearch(st.prevQ||'',st.prevTab||'all'); },
+  backToSearch:()=>{ const st=sheetState||{}; openItemSearch(st.prevQ||'',st.prevTab||'all',st.prevGroup||'',st.prevSub||''); },
   niKind:d=>{ const st=sheetState; const keep={q:$('#ni-name')?$('#ni-name').value:''}; st.kind=d.k; $('#ni-body').innerHTML=newItemBody(d.k,keep.q); },
   pdf:d=>openPdf(d.id), closePdf:()=>{ $('#pdf').classList.remove('on'); pdfZoom=false; }, pdfZoom:()=>{ pdfZoom=!pdfZoom; fitPdf(); }, share:d=>sharePdf(d.id,d.kind),
   print:()=>printPdf(),
@@ -2177,7 +2260,9 @@ const A={
   exportMasters:()=>exportMasters(), applyImport:()=>applyImport(),
   delDemo:()=>{ if(!isAdmin()){ denied(); return } confirmSheet('サンプルデータを削除','お試し用の顧客・見積・請求書を削除します。工事項目・商品・設定・スタッフは残ります。','削除する','delDemoOk',''); },
   delDemoOk:()=>{ if(!isAdmin()){ denied(); return } delDemo(); }, editCustomer:d=>openCustomerForm(d.id,false), custType:d=>setCustType(d.t), saveCustomer:()=>saveCustomer(), estForCustomer:d=>estForCustomer(d.id),
-  masterTab:d=>{ masterTab=d.tab; masterQ=''; render() }, openMaster:d=>{ if(!isAdmin()) return; openMasterForm(d.kind,d.id) }, newMaster:d=>openMasterForm(d.kind,null), saveMaster:()=>saveMaster(),
+  masterTab:d=>{ masterTab=d.tab; masterQ=''; masterCat=''; masterGroup=''; masterSub=''; render() },
+  masterNav:d=>{ if(d.k==='cat') masterCat=d.v; else if(d.k==='group'){ masterGroup=d.v; masterSub=''; } else masterSub=d.v; render() },
+  masterBack:()=>{ if(masterSub) masterSub=''; else if(masterGroup) masterGroup=''; else if(masterCat) masterCat=''; render() }, openMaster:d=>{ if(!isAdmin()) return; openMasterForm(d.kind,d.id) }, newMaster:d=>openMasterForm(d.kind,null), saveMaster:()=>saveMaster(),
   delMaster:()=>{ const st=sheetState; openSheetRaw('<div class="sheet-h"><h2>削除しますか？</h2></div><div class="sheet-b"><p>マスターから削除します。作成済みの見積には影響しません。</p></div><div class="sheet-f"><button class="btn btn-ghost" data-act="cancelDelMaster">やめる</button><button class="btn btn-danger" style="flex:1" data-act="delMasterOk">削除する</button></div>'); sheetState=st; },
   cancelDelMaster:()=>{ const st=sheetState; openMasterForm(st.kind,st.id); },
   delMasterOk:()=>delMasterOk(), openTemplate:d=>openTemplate(d.id),
@@ -2200,7 +2285,7 @@ const LIVE={
   custq:v=>{ route.params.q=v; const l=$('#cust-list'); if(l) l.innerHTML=custListHtml(); },
   custpick:v=>{ const l=$('#cust-pick'); if(l) l.innerHTML=custPickList(v); },
   itemq:v=>{ if(!sheetState) return; sheetState.q=v; const l=$('#item-results'); if(l) l.innerHTML=itemResults(); },
-  masterq:v=>{ masterQ=v; const l=$('#master-list'); if(l) l.innerHTML=masterListHtml(); },
+  masterq:v=>{ masterQ=v; const l=$('#master-list'); if(l) l.innerHTML=masterListHtml(); const c=$('#master-crumb'); if(c) c.style.display=v.trim()?'none':'flex'; },
 };
 function onInput(e){
   const el=e.target; if(!el||!el.dataset) return;
